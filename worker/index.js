@@ -2,6 +2,7 @@
 
 const COOKIE_NAME = 'fxk_board_browser';
 const COOKIE_PATTERN = /^[0-9a-f-]{36}$/;
+const MIRROR_ORIGIN = 'https://chai-maomao.github.io';
 const PAIRS = new Set(['EURUSD','USDJPY','GBPUSD','AUDUSD','NZDUSD','USDCHF','USDCAD','EURJPY','GBPJPY','AUDJPY','NZDJPY','CADJPY','EURGBP','EURCHF']);
 
 function json(value, status = 200, extraHeaders = {}) {
@@ -11,7 +12,11 @@ function json(value, status = 200, extraHeaders = {}) {
   });
 }
 
-function browserIdentity(request) {
+function browserIdentity(request, mirror = false) {
+  if (mirror) {
+    const id = request.headers.get('x-fxk-visitor-id');
+    return { id:id && COOKIE_PATTERN.test(id) ? id : null, setCookie:null };
+  }
   const cookie = request.headers.get('cookie') || '';
   const token = cookie.split(';').map(part => part.trim()).find(part => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
   if (token && COOKIE_PATTERN.test(token)) return { id:token, setCookie:null };
@@ -21,6 +26,14 @@ function browserIdentity(request) {
 }
 
 function headersFor(identity) { return identity.setCookie ? { 'set-cookie':identity.setCookie } : {}; }
+
+function mirrorResponse(response, mirror) {
+  if (!mirror) return response;
+  const headers = new Headers(response.headers);
+  headers.set('access-control-allow-origin',MIRROR_ORIGIN);
+  headers.set('vary','Origin');
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+}
 
 function normalizeHistory(record) {
   if (!record || !PAIRS.has(record.symbol) || !['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓'].includes(record.action)) return null;
@@ -85,18 +98,21 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/leaderboard' || url.pathname.startsWith('/api/leaderboard/')) {
-      if (!env.DB) return json({ error:'排行榜暂不可用，请稍后重试。' },503);
-      const identity = browserIdentity(request);
-      if (request.method !== 'GET' && request.headers.get('origin') && request.headers.get('origin') !== url.origin) return json({ error:'跨站请求被拒绝。' },403,headersFor(identity));
+      const origin = request.headers.get('origin'), mirror = origin === MIRROR_ORIGIN;
+      if (origin && origin !== url.origin && !mirror) return json({ error:'跨站请求被拒绝。' },403);
+      if (request.method === 'OPTIONS' && mirror) return new Response(null,{status:204,headers:{'access-control-allow-origin':MIRROR_ORIGIN,'access-control-allow-methods':'GET, POST, DELETE, OPTIONS','access-control-allow-headers':'Content-Type, X-FXK-Visitor-ID','access-control-max-age':'600','vary':'Origin'}});
+      if (!env.DB) return mirrorResponse(json({ error:'排行榜暂不可用，请稍后重试。' },503),mirror);
+      const identity = browserIdentity(request,mirror);
+      if (!identity.id) return mirrorResponse(json({ error:'浏览器身份无效，请刷新页面重试。' },400),mirror);
       try {
-        if (request.method === 'GET' && url.pathname === '/api/leaderboard') return await listEntries(env.DB,identity);
-        if (request.method === 'GET' && /^\/api\/leaderboard\/[0-9a-f]{64}$/.test(url.pathname)) return await entryDetail(env.DB,url.pathname.slice('/api/leaderboard/'.length),identity);
-        if (request.method === 'POST' && url.pathname === '/api/leaderboard') return await publishEntry(env.DB,request,identity);
-        if (request.method === 'DELETE' && url.pathname === '/api/leaderboard') return await removeEntry(env.DB,identity);
-        return json({ error:'不支持此操作。' },405,headersFor(identity));
+        if (request.method === 'GET' && url.pathname === '/api/leaderboard') return mirrorResponse(await listEntries(env.DB,identity),mirror);
+        if (request.method === 'GET' && /^\/api\/leaderboard\/[0-9a-f]{64}$/.test(url.pathname)) return mirrorResponse(await entryDetail(env.DB,url.pathname.slice('/api/leaderboard/'.length),identity),mirror);
+        if (request.method === 'POST' && url.pathname === '/api/leaderboard') return mirrorResponse(await publishEntry(env.DB,request,identity),mirror);
+        if (request.method === 'DELETE' && url.pathname === '/api/leaderboard') return mirrorResponse(await removeEntry(env.DB,identity),mirror);
+        return mirrorResponse(json({ error:'不支持此操作。' },405,headersFor(identity)),mirror);
       } catch (error) {
         console.error('leaderboard request failed',error);
-        return json({ error:'排行榜暂不可用，请稍后重试。' },503,headersFor(identity));
+        return mirrorResponse(json({ error:'排行榜暂不可用，请稍后重试。' },503,headersFor(identity)),mirror);
       }
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed',{status:405});

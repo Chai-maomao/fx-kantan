@@ -6,6 +6,9 @@
   const PERIODS = {'30s':.5,'1m':1,'5m':5,'15m':15,'1h':60,'4h':240,'1d':1440};
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
   const START = 10000, KEY = 'fx-kantan-paper-v1', SHORT_BARS_KEY = 'fx-kantan-30s-bars-v1', PAGE_OPENED_AT = Date.now();
+  const GITHUB_MIRROR = location.hostname.toLowerCase() === 'chai-maomao.github.io';
+  const LEADERBOARD_API = GITHUB_MIRROR ? 'https://fx-kantan.top/api/leaderboard' : '/api/leaderboard';
+  const MIRROR_ID_KEY = 'fx-kantan-board-id-v1';
   const CURRENCY_NAMES = {USD:'美元',EUR:'欧元',GBP:'英镑',JPY:'日元',AUD:'澳元',NZD:'新西兰元',CHF:'瑞士法郎',CAD:'加元'};
   const $ = id => document.getElementById(id);
   const money = n => `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -38,6 +41,20 @@
   let chartRequest = 0, chartLastFetch = 0, quoteRequestRunning = false, streamConnected = false;
   let renderTimer = 0, plotTimer = 0, streamRetryTimer = 0, streamStarting = false, stream;
   let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
+  let mirrorVisitorId = null;
+  function leaderboardFetch(path = '', options = {}) {
+    if (!GITHUB_MIRROR) return fetch(`${LEADERBOARD_API}${path}`,{...options,credentials:'same-origin'});
+    if (!mirrorVisitorId) {
+      try { mirrorVisitorId = localStorage.getItem(MIRROR_ID_KEY); } catch {}
+      if (!mirrorVisitorId || !/^[0-9a-f-]{36}$/.test(mirrorVisitorId)) {
+        mirrorVisitorId = crypto.randomUUID();
+        try { localStorage.setItem(MIRROR_ID_KEY,mirrorVisitorId); } catch {}
+      }
+    }
+    const headers = new Headers(options.headers);
+    headers.set('X-FXK-Visitor-ID',mirrorVisitorId);
+    return fetch(`${LEADERBOARD_API}${path}`,{...options,headers,credentials:'omit'});
+  }
   function save() { try { localStorage.setItem(KEY,JSON.stringify(account)); } catch {} }
   function currentQuote(symbol) {
     const q = quotes[symbol];
@@ -210,7 +227,7 @@
     if(!open || detail.dataset.loaded==='true')return;
     detail.replaceChildren(boardElement('p','leaderboard-detail-message','正在读取交易记录…'));
     try {
-      const response=await fetch(`/api/leaderboard/${id}`,{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const response=await leaderboardFetch(`/${id}`,{cache:'no-store',signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'无法读取交易记录。');
       detail.dataset.loaded='true';if(!detail.hidden)renderLeaderboardHistory(detail,Array.isArray(data.entry?.history)?data.entry.history:[]);
     } catch(error) {if(!detail.hidden)detail.replaceChildren(boardElement('p','leaderboard-detail-message',error.message||'无法读取交易记录，请稍后重试。'));}
@@ -229,7 +246,7 @@
   }
   async function refreshLeaderboard() {
     try {
-      const response=await fetch('/api/leaderboard',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const response=await leaderboardFetch('',{cache:'no-store',signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'无法读取排行榜。');
       leaderboardMine=data.mine;
       $('leaderboard-publish').disabled=false;
@@ -246,7 +263,7 @@
     leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布盈亏…');
     try {
       const history=account.history.slice(0,20).map(({time,symbol,action,units,price,pnl})=>({time,symbol,action,units,price,pnl}));
-      const response=await fetch('/api/leaderboard',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({name,balance:account.balance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
+      const response=await leaderboardFetch('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,balance:account.balance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'发布失败。');
       leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('盈亏和最近 20 条交易记录已公开。此浏览器再次发布会覆盖这条记录。','success');
     } catch(error) {setLeaderboardStatus(error.message||'发布失败，请稍后重试。','error');}
@@ -255,7 +272,7 @@
   async function removeLeaderboard() {
     if(leaderboardBusy)return;leaderboardBusy=true;$('leaderboard-remove').disabled=true;
     try {
-      const response=await fetch('/api/leaderboard',{method:'DELETE',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const response=await leaderboardFetch('',{method:'DELETE',signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'撤下失败。');
       leaderboardMine=null;await refreshLeaderboard();setLeaderboardStatus('你的公开记录已撤下。','success');
     } catch(error) {setLeaderboardStatus(error.message||'撤下失败，请稍后重试。','error');}
@@ -481,6 +498,7 @@
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
+  if(GITHUB_MIRROR)$('leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
   updateShortLock();setInterval(updateShortLock,1000);
   render();refreshQuotes();refreshChart();startStream();refreshLeaderboard();
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
