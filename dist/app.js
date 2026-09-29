@@ -252,9 +252,14 @@
       $('leaderboard-publish').disabled=false;
       if(data.mine && !$('leaderboard-name').value) $('leaderboard-name').value=data.mine.name;
       $('leaderboard-remove').hidden=!data.mine;
+      $('leaderboard-remove').disabled=false;
       renderLeaderboard(Array.isArray(data.entries)?data.entries:[]);
       setLeaderboardStatus(data.mine?'此浏览器已发布记录；再次发布会覆盖旧记录。':'填写展示名即可自愿发布盈亏。','success');
-    } catch(error) {setLeaderboardStatus(error.message||'排行榜暂不可用，请稍后刷新。','error');}
+    } catch(error) {
+      $('leaderboard-publish').disabled=true;
+      $('leaderboard-remove').disabled=true;
+      setLeaderboardStatus(GITHUB_MIRROR?'抱歉，镜像站暂时无法连接主站排行榜。请稍后点击“刷新”重试；模拟交易和行情仍可使用。':error.message||'排行榜暂不可用，请稍后刷新。','error');
+    }
   }
   async function publishLeaderboard(event) {
     event.preventDefault();if(leaderboardBusy)return;
