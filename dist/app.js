@@ -5,7 +5,8 @@
   const LEVERAGES = [1,2,5,10,20,50,100];
   const PERIODS = {'30s':.5,'1m':1,'5m':5,'15m':15,'1h':60,'4h':240,'1d':1440};
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
-  const START = 10000, KEY = 'fx-kantan-paper-v1', SHORT_BARS_KEY = 'fx-kantan-30s-bars-v1';
+  const START = 10000, KEY = 'fx-kantan-paper-v1', SHORT_BARS_KEY = 'fx-kantan-30s-bars-v1', PAGE_OPENED_AT = Date.now();
+  const CURRENCY_NAMES = {USD:'美元',EUR:'欧元',GBP:'英镑',JPY:'日元',AUD:'澳元',NZD:'新西兰元',CHF:'瑞士法郎',CAD:'加元'};
   const $ = id => document.getElementById(id);
   const money = n => `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const pairName = s => `${s.slice(0,3)}/${s.slice(3)}`;
@@ -21,8 +22,8 @@
       return {
         balance:raw.balance,
         leverage:LEVERAGES.includes(raw.leverage) ? raw.leverage : 20,
-        positions:raw.positions.filter(p => PAIRS.includes(p.symbol) && ['long','short'].includes(p.side) && Number.isFinite(p.entry) && p.entry > 0 && Number.isInteger(p.units) && p.units > 0 && Number.isFinite(p.margin) && p.margin > 0).map(p => ({...p,leverage:LEVERAGES.includes(p.leverage) ? p.leverage : 20})),
-        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
+        positions:raw.positions.filter(p => PAIRS.includes(p.symbol) && ['long','short'].includes(p.side) && Number.isFinite(p.entry) && p.entry > 0 && Number.isInteger(p.units) && p.units > 0 && Number.isFinite(p.margin) && p.margin > 0).map(p => ({...p,leverage:LEVERAGES.includes(p.leverage) ? p.leverage : 20,takeProfit:Number.isFinite(p.takeProfit)&&p.takeProfit>0?p.takeProfit:null,stopLoss:Number.isFinite(p.stopLoss)&&p.stopLoss>0?p.stopLoss:null})),
+        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
       };
     } catch { return {balance:START,leverage:20,positions:[],history:[]}; }
   }
@@ -36,6 +37,7 @@
   } catch { for (const symbol of PAIRS) shortBars[symbol] = []; }
   let chartRequest = 0, chartLastFetch = 0, quoteRequestRunning = false, streamConnected = false;
   let renderTimer = 0, plotTimer = 0, streamRetryTimer = 0, streamStarting = false, stream;
+  let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
   function save() { try { localStorage.setItem(KEY,JSON.stringify(account)); } catch {} }
   function currentQuote(symbol) {
     const q = quotes[symbol];
@@ -117,11 +119,14 @@
   }
   function renderTrade() {
     const q = currentQuote(selected), live = canTrade(selected);
+    const currency = selected.slice(0,3), units = orderUnits();
     $('trade-pair').textContent = pairName(selected);
+    $('units-currency').textContent = `${CURRENCY_NAMES[currency]}（${currency}）`;
+    $('units-explain').textContent = `${Number.isFinite(units) ? units.toLocaleString('zh-CN') : '输入的数量'} 表示交易 ${Number.isFinite(units) ? units.toLocaleString('zh-CN') : '相应数量'} ${CURRENCY_NAMES[currency]}（${currency}）；所需保证金另行计算。`;
     $('trade-state').textContent = !q ? '等待报价' : live ? '可交易' : q.marketState === 'open' ? '报价或换算汇率过期' : '市场休市';
     $('bid').textContent = q ? rate(q.bid,selected) : '—';
     $('ask').textContent = q ? rate(q.ask,selected) : '—';
-    const units = orderUnits(), valid = Number.isInteger(units) && units >= 1000 && units <= 1000000 && units % 1000 === 0;
+    const valid = Number.isInteger(units) && units >= 1000 && units <= 1000000 && units % 1000 === 0;
     const margin = valid ? orderMargin(selected,units,account.leverage) : null, t = totals();
     $('estimated-margin').textContent = margin == null ? '—' : money(margin);
     $('buy-button').disabled = $('sell-button').disabled = !(live && valid && margin != null && t.complete && margin <= t.free);
@@ -136,13 +141,20 @@
   function renderRecords() {
     $('positions-body').innerHTML = account.positions.length ? account.positions.map(p => {
       const q = currentQuote(p.symbol), pnl = markToMarket(p), exit = q ? p.side === 'long' ? q.bid : q.ask : null;
-      return `<tr><td><b>${pairName(p.symbol)}</b></td><td class="${p.side === 'long' ? 'side-long' : 'side-short'}">${p.side === 'long' ? '买入' : '卖出'}</td><td>${p.units.toLocaleString()}</td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td>${exit == null ? '—' : rate(exit,p.symbol)}</td><td class="${pnl == null ? '' : positiveClass(pnl)}">${pnl == null ? '—' : money(pnl)}</td><td><button class="close-button" type="button" data-close="${p.id}" ${canTrade(p.symbol) ? '' : 'disabled'}>平仓</button></td></tr>`;
-    }).join('') : '<tr class="empty-row"><td colspan="8">还没有持仓。选择货币对，试着开第一单。</td></tr>';
+      return `<tr><td><b>${pairName(p.symbol)}</b></td><td class="${p.side === 'long' ? 'side-long' : 'side-short'}">${p.side === 'long' ? '买入' : '卖出'}</td><td>${p.units.toLocaleString()}</td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td>${exit == null ? '—' : rate(exit,p.symbol)}</td><td>${p.takeProfit == null ? '—' : rate(p.takeProfit,p.symbol)} / ${p.stopLoss == null ? '—' : rate(p.stopLoss,p.symbol)}</td><td class="${pnl == null ? '' : positiveClass(pnl)}">${pnl == null ? '—' : money(pnl)}</td><td><button class="close-button" type="button" data-risk="${p.id}">设置止盈止损</button> <button class="close-button" type="button" data-close="${p.id}" ${canTrade(p.symbol) ? '' : 'disabled'}>平仓</button></td></tr>`;
+    }).join('') : '<tr class="empty-row"><td colspan="9">还没有持仓。选择货币对，试着开第一单。</td></tr>';
     $('history-body').innerHTML = account.history.length ? account.history.map(h => `<tr><td>${localTime(h.time)}</td><td>${pairName(h.symbol)}</td><td>${h.action}</td><td>${Number(h.units).toLocaleString()}</td><td>${rate(Number(h.price),h.symbol)}</td><td class="${h.pnl == null ? '' : positiveClass(h.pnl)}">${h.pnl == null ? '—' : money(h.pnl)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="6">交易记录会显示在这里。</td></tr>';
   }
   function render() { renderStatus(); renderPairList(); renderAccount(); renderTrade(); renderChartHeading(); renderRecords(); }
   function scheduleRender() { if (!renderTimer) renderTimer = setTimeout(() => {renderTimer=0;render();},100); }
   function schedulePlot() { if (!plotTimer) plotTimer = setTimeout(() => {plotTimer=0;drawChart();},150); }
+  function riskValue(id) { const textValue=$(id).value.trim();return textValue === '' ? null : Number(textValue); }
+  function riskError(side,entry,exit,takeProfit,stopLoss) {
+    if ([takeProfit,stopLoss].some(value=>value!==null&&(!Number.isFinite(value)||value<=0))) return '止盈止损须填写大于 0 的汇率价格，或留空。';
+    if (side==='long' && ((takeProfit!==null&&takeProfit<=entry)||(stopLoss!==null&&stopLoss>=exit))) return '买入做多时，止盈需高于买入价，止损需低于当前卖出价。';
+    if (side==='short' && ((takeProfit!==null&&takeProfit>=entry)||(stopLoss!==null&&stopLoss<=exit))) return '卖出做空时，止盈需低于卖出价，止损需高于当前买入价。';
+    return null;
+  }
   function trade(side) {
     const q = currentQuote(selected), units = orderUnits();
     if (!canTrade(selected)) return showMessage('当前报价不可交易，请等待最新行情。','error');
@@ -150,13 +162,15 @@
     const margin = orderMargin(selected,units,account.leverage), t = totals();
     if (margin == null || !t.complete || margin > t.free) return showMessage('可用保证金不足或换算汇率不可用。','error');
     const entry = side === 'long' ? q.ask : q.bid;
+    const takeProfit=riskValue('take-profit'),stopLoss=riskValue('stop-loss'),error=riskError(side,entry,side==='long'?q.bid:q.ask,takeProfit,stopLoss);
+    if(error) return showMessage(error,'error');
     const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    account.positions.unshift({id,symbol:selected,side,units,entry,margin,leverage:account.leverage,time:new Date().toISOString()});
+    account.positions.unshift({id,symbol:selected,side,units,entry,margin,leverage:account.leverage,takeProfit,stopLoss,time:new Date().toISOString()});
     account.history.unshift({time:new Date().toISOString(),symbol:selected,action:side === 'long' ? '买入开仓' : '卖出开仓',units,price:entry,pnl:null});
     account.history = account.history.slice(0,100);
-    save();render();showMessage(`${pairName(selected)} 已${side === 'long' ? '买入' : '卖出'} ${units.toLocaleString()} 单位，杠杆 ${account.leverage}×。`,'success');
+    $('take-profit').value='';$('stop-loss').value='';save();render();showMessage(`${pairName(selected)} 已${side === 'long' ? '买入' : '卖出'} ${units.toLocaleString()} ${selected.slice(0,3)}，杠杆 ${account.leverage}×。`,'success');
   }
-  function closePosition(id) {
+  function closePosition(id,reason='平仓') {
     const index = account.positions.findIndex(p => p.id === id);
     if (index < 0) return;
     const p = account.positions[index], q = currentQuote(p.symbol);
@@ -165,9 +179,85 @@
     if (pnl == null) return showMessage('暂时无法计算美元盈亏。','error');
     const price = p.side === 'long' ? q.bid : q.ask;
     account.balance += pnl;account.positions.splice(index,1);
-    account.history.unshift({time:new Date().toISOString(),symbol:p.symbol,action:'平仓',units:p.units,price,pnl});
+    account.history.unshift({time:new Date().toISOString(),symbol:p.symbol,action:reason,units:p.units,price,pnl});
     account.history = account.history.slice(0,100);
-    save();render();showMessage(`已平仓，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}。`,pnl >= 0 ? 'success' : 'error');
+    save();render();showMessage(`${reason==='平仓'?'已平仓':reason+'已触发'}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}。`,pnl >= 0 ? 'success' : 'error');
+  }
+  function processTriggers() {
+    for(const p of [...account.positions]) {
+      if(!canTrade(p.symbol)) continue;
+      const q=currentQuote(p.symbol),exit=p.side==='long'?q.bid:q.ask;
+      if(p.takeProfit!=null && (p.side==='long'?exit>=p.takeProfit:exit<=p.takeProfit)) closePosition(p.id,'止盈平仓');
+      else if(p.stopLoss!=null && (p.side==='long'?exit<=p.stopLoss:exit>=p.stopLoss)) closePosition(p.id,'止损平仓');
+    }
+  }
+  function setLeaderboardStatus(message,kind='') { $('leaderboard-status').textContent=message;$('leaderboard-status').className=`leaderboard-status ${kind}`; }
+  function boardElement(tag,className,textValue) { const el=document.createElement(tag);if(className)el.className=className;if(textValue!=null)el.textContent=textValue;return el; }
+  function renderLeaderboard(entries) {
+    const list=$('leaderboard-list');list.replaceChildren();
+    if(!entries.length){list.append(boardElement('p','leaderboard-empty','还没有人发布仓位，快来占据第一席。'));return;}
+    entries.forEach((entry,index)=>{
+      const card=boardElement('article','leaderboard-entry'),head=boardElement('div','leaderboard-entry-head');
+      head.append(boardElement('span','leaderboard-rank',`#${index+1}`),boardElement('strong','leaderboard-name',entry.name),boardElement('span',`leaderboard-score ${positiveClass(entry.score)}`,`${entry.score>=0?'+':''}${money(entry.score)}`));
+      const meta=boardElement('p','leaderboard-meta',`发布于 ${localTime(entry.updatedAt)} · ${entry.positions.length} 笔持仓`);
+      const positions=boardElement('div','leaderboard-positions');
+      if(!entry.positions.length) positions.append(boardElement('span','leaderboard-position','当前空仓'));
+      else entry.positions.forEach(p=>positions.append(boardElement('span','leaderboard-position',`${pairName(p.symbol)} ${p.side==='long'?'买入':'卖出'} ${Number(p.units).toLocaleString()} ${p.symbol.slice(0,3)} · ${p.leverage}× · 入场 ${rate(p.entry,p.symbol)}${p.takeProfit==null?'':` · 止盈 ${rate(p.takeProfit,p.symbol)}`}${p.stopLoss==null?'':` · 止损 ${rate(p.stopLoss,p.symbol)}`}`)));
+      card.append(head,meta,positions);list.append(card);
+    });
+  }
+  async function refreshLeaderboard() {
+    try {
+      const response=await fetch('/api/leaderboard',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'无法读取排行榜。');
+      leaderboardMine=data.mine;
+      $('leaderboard-publish').disabled=false;
+      if(data.mine && !$('leaderboard-name').value) $('leaderboard-name').value=data.mine.name;
+      $('leaderboard-remove').hidden=!data.mine;
+      renderLeaderboard(Array.isArray(data.entries)?data.entries:[]);
+      setLeaderboardStatus(data.mine?'此浏览器已发布记录；再次发布会覆盖旧记录。':'填写展示名即可自愿发布仓位。','success');
+    } catch(error) {setLeaderboardStatus(error.message||'排行榜暂不可用，请稍后刷新。','error');}
+  }
+  async function publishLeaderboard(event) {
+    event.preventDefault();if(leaderboardBusy)return;
+    const t=totals();if(!t.complete)return setLeaderboardStatus('行情尚未齐全，暂时无法计算模拟收益。','error');
+    const name=$('leaderboard-name').value.trim();if(name.length<2||name.length>24)return setLeaderboardStatus('展示名需为 2 至 24 个字。','error');
+    leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布仓位…');
+    try {
+      const positions=account.positions.map(({symbol,side,units,leverage,entry,takeProfit,stopLoss})=>({symbol,side,units,leverage,entry,takeProfit,stopLoss}));
+      const response=await fetch('/api/leaderboard',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({name,balance:account.balance,floating:t.floating,positions}),signal:AbortSignal.timeout(12000)});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'发布失败。');
+      leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('仓位快照已公开。此浏览器再次发布会覆盖这条记录。','success');
+    } catch(error) {setLeaderboardStatus(error.message||'发布失败，请稍后重试。','error');}
+    finally {leaderboardBusy=false;$('leaderboard-publish').disabled=false;}
+  }
+  async function removeLeaderboard() {
+    if(leaderboardBusy)return;leaderboardBusy=true;$('leaderboard-remove').disabled=true;
+    try {
+      const response=await fetch('/api/leaderboard',{method:'DELETE',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'撤下失败。');
+      leaderboardMine=null;await refreshLeaderboard();setLeaderboardStatus('你的公开记录已撤下。','success');
+    } catch(error) {setLeaderboardStatus(error.message||'撤下失败，请稍后重试。','error');}
+    finally {leaderboardBusy=false;$('leaderboard-remove').disabled=false;}
+  }
+  function updateShortLock() {
+    const remaining=Math.max(0,Math.ceil((120000-(Date.now()-PAGE_OPENED_AT))/1000));
+    $('short-interval').disabled=remaining>0;
+    $('short-lock').hidden=remaining===0;
+    $('short-lock-tooltip').textContent=`还需等待 ${remaining} 秒`;
+    $('short-lock').setAttribute('aria-label',`30 秒 K 线还需等待 ${remaining} 秒`);
+  }
+  function openRiskDialog(id) {
+    const p=account.positions.find(item=>item.id===id);if(!p)return;
+    editingPositionId=id;$('risk-pair').textContent=`${pairName(p.symbol)} · ${p.side==='long'?'买入做多':'卖出做空'} · 当前价 ${rate((currentQuote(p.symbol)?.mid),p.symbol)}`;
+    $('risk-tp').value=p.takeProfit??'';$('risk-sl').value=p.stopLoss??'';$('risk-message').textContent='留空可取消已有设置。页面运行且收到行情时才会自动平仓。';$('risk-dialog').showModal();
+  }
+  function saveRisk(event) {
+    event.preventDefault();const p=account.positions.find(item=>item.id===editingPositionId),q=p&&currentQuote(p.symbol);
+    if(!p||!q||!canTrade(p.symbol)){$('risk-message').textContent='请等待该货币对的最新报价。';return;}
+    const exit=p.side==='long'?q.bid:q.ask,takeProfit=riskValue('risk-tp'),stopLoss=riskValue('risk-sl');
+    const error=riskError(p.side,p.entry,exit,takeProfit,stopLoss);if(error){$('risk-message').textContent=error;return;}
+    p.takeProfit=takeProfit;p.stopLoss=stopLoss;save();renderRecords();$('risk-dialog').close();editingPositionId=null;showMessage(`${pairName(p.symbol)} 的止盈止损已保存。`,'success');
   }
   function chartConfig() {
     const interval = $('chart-interval').value, range = $('chart-range').value;
@@ -278,7 +368,7 @@
       if(!response.ok) throw Error(`HTTP ${response.status}`);
       const data=await response.json();
       PAIRS.forEach(s=>{if(acceptQuote(data[s])) updateCurrentBar(data[s]);});
-      render();
+      processTriggers();render();
     }catch{
       if(!streamConnected){$('feed-status').textContent='行情连接中断';$('feed-status').className='status status-stale';renderTrade();}
     }finally{quoteRequestRunning=false;}
@@ -288,7 +378,7 @@
     streamStarting = true;
     clearTimeout(streamRetryTimer);
     stream=new signalR.HubConnectionBuilder().withUrl('https://biquote.io/hubs/tick',{skipNegotiation:true,transport:signalR.HttpTransportType.WebSockets}).withAutomaticReconnect([0,2000,5000,10000]).build();
-    stream.on('ReceiveTick',tick=>{if(acceptQuote(tick)){updateCurrentBar(tick);scheduleRender();}});
+    stream.on('ReceiveTick',tick=>{if(acceptQuote(tick)){updateCurrentBar(tick);processTriggers();scheduleRender();}});
     stream.onreconnecting(()=>{streamConnected=false;renderStatus();});
     stream.onreconnected(async()=>{try{await stream.invoke('Subscribe',PAIRS);streamConnected=true;refreshQuotes();renderStatus();}catch{streamConnected=false;renderStatus();}});
     stream.onclose(()=>{streamConnected=false;renderStatus();streamRetryTimer=setTimeout(startStream,15000);});
@@ -296,7 +386,7 @@
     catch{streamConnected=false;renderStatus();streamRetryTimer=setTimeout(startStream,15000);}
     finally{streamStarting=false;}
   }
-  $('pair-list').addEventListener('click',e=>{const b=e.target.closest('[data-symbol]');if(!b||!PAIRS.includes(b.dataset.symbol))return;selected=b.dataset.symbol;chartBars=[];visibleCount=null;rightOffset=0;chartHover=-1;render();refreshChart();});
+  $('pair-list').addEventListener('click',e=>{const b=e.target.closest('[data-symbol]');if(!b||!PAIRS.includes(b.dataset.symbol))return;selected=b.dataset.symbol;chartBars=[];visibleCount=null;rightOffset=0;chartHover=-1;$('take-profit').value='';$('stop-loss').value='';render();refreshChart();});
   document.querySelector('.watch-filter').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;renderPairList();});
   document.querySelector('.segmented').addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;chartMode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(item=>{item.classList.toggle('active',item===b);item.setAttribute('aria-pressed',item===b?'true':'false');});drawChart();});
   $('chart-interval').addEventListener('change',()=>adjustChartSelection('interval'));
@@ -341,10 +431,16 @@
   document.querySelectorAll('[data-units]').forEach(b=>b.addEventListener('click',()=>{$('units').value=b.dataset.units;renderTrade();}));
   $('buy-button').addEventListener('click',()=>trade('long'));
   $('sell-button').addEventListener('click',()=>trade('short'));
-  $('positions-body').addEventListener('click',e=>{const b=e.target.closest('[data-close]');if(b)closePosition(b.dataset.close);});
+  $('positions-body').addEventListener('click',e=>{const close=e.target.closest('[data-close]'),risk=e.target.closest('[data-risk]');if(close)closePosition(close.dataset.close);else if(risk)openRiskDialog(risk.dataset.risk);});
+  $('risk-form').addEventListener('submit',saveRisk);
+  $('risk-cancel').addEventListener('click',()=>{$('risk-dialog').close();editingPositionId=null;});
+  $('leaderboard-form').addEventListener('submit',publishLeaderboard);
+  $('leaderboard-remove').addEventListener('click',removeLeaderboard);
+  $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
-  render();refreshQuotes();refreshChart();startStream();
+  updateShortLock();setInterval(updateShortLock,1000);
+  render();refreshQuotes();refreshChart();startStream();refreshLeaderboard();
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
   setInterval(()=>{if(!document.hidden&&streamConnected)refreshQuotes();},30000);
   setInterval(()=>{if(!document.hidden)refreshChart();},20000);

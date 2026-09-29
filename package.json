@@ -1,0 +1,14 @@
+{
+  "name": "fx-kantan-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-worker.mjs",
+    "dev": "node scripts/build-worker.mjs && node scripts/preview-worker.mjs",
+    "db:generate": "drizzle-kit generate"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "drizzle-orm": "0.45.2"
+  }
+}
