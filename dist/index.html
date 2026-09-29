@@ -47,8 +47,8 @@
           <input id="units" type="number" min="1000" max="1000000" step="1000" value="1000" inputmode="numeric">
           <p id="units-explain" class="units-explain">1,000 表示交易 1,000 欧元（EUR）；所需保证金另行计算。</p>
           <div class="quick-units"><button type="button" data-units="1000">1,000</button><button type="button" data-units="5000">5,000</button><button type="button" data-units="10000">10,000</button></div>
-          <div class="stop-fields"><label for="take-profit">止盈价 <input id="take-profit" type="number" min="0" step="any" inputmode="decimal" placeholder="可选"></label><label for="stop-loss">止损价 <input id="stop-loss" type="number" min="0" step="any" inputmode="decimal" placeholder="可选"></label></div>
-          <p class="stop-note">填写汇率价格。做多止盈须高于开仓价，止损须低于当前卖出价；做空相反。仅在页面运行且收到行情时触发，按触发时的买卖价平仓。</p>
+          <div class="stop-fields"><label for="take-profit">止盈价 <input id="take-profit" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止盈"></label><label for="stop-loss">止损价 <input id="stop-loss" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止损"></label></div>
+          <p class="stop-note">淡色当前价仅作参考，点数字框的小箭头或输入后才会设置；留空则不设置。做多止盈须高于开仓价，止损须低于当前卖出价；做空相反。仅在页面运行且收到行情时触发。</p>
           <div class="order-summary"><span>预计占用保证金</span><strong id="estimated-margin">—</strong></div>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
@@ -70,7 +70,7 @@
         <div id="leaderboard-list" class="leaderboard-list"></div>
         <p class="leaderboard-note">榜单和交易记录是最近一次自愿发布的快照，不会随本地交易自动更新；没有实名或反作弊验证。清除本站 Cookie 后会被视作新浏览器，旧记录将无法自行认领或撤下。</p>
       </section>
-      <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0" step="any" inputmode="decimal" placeholder="留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0" step="any" inputmode="decimal" placeholder="留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
+      <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
       <section class="welcome panel">
         <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 10,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
         <div class="hero-art"><img src="./assets/kurumi-hero.png" alt="《FX战士久留美》角色主视觉插画"></div>
@@ -88,6 +88,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=10" defer></script>
+  <script src="./app.js?v=11" defer></script>
 </body>
 </html>
