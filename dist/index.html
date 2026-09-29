@@ -7,7 +7,7 @@
   <meta name="description" content="FX kantan! 是一个使用实时外汇行情的免费虚拟交易游戏。">
   <title>FX kantan! · 外汇模拟交易</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%230b1630'/%3E%3Cpath d='M12 42l12-11 9 7 18-19' fill='none' stroke='%2351ebc4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='19' r='5' fill='%23ff718b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css?v=2">
+  <link rel="stylesheet" href="./style.css?v=3">
 </head>
 <body>
   <div class="app-shell">
@@ -32,9 +32,9 @@
         </section>
         <section class="market panel">
           <div class="chart-heading"><div><span class="eyebrow">MARKET / 实时行情</span><h2 id="chart-title">EUR/USD</h2></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
-          <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><label>周期<select id="chart-interval"><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select></label><label>跨度<select id="chart-range"><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select></label></div>
-          <div class="chart-wrap"><svg id="chart" viewBox="0 0 800 360" preserveAspectRatio="none" role="img" aria-label="汇率图表"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path><g id="chart-candles"></g><g id="chart-axis"></g><g id="chart-last"></g></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div></div>
-          <div class="chart-foot"><span id="chart-detail">5 分钟周期 · 近 1 天</span><span id="updated-at">等待最新报价</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div>
+          <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><label>周期<select id="chart-interval"><option value="30s">30 秒</option><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select></label><label>跨度<select id="chart-range"><option value="1h">1 小时</option><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select></label><button id="chart-reset" class="chart-reset" type="button" title="恢复完整视图">重置视图</button></div>
+          <div class="chart-wrap" id="chart-wrap"><svg id="chart" viewBox="0 0 800 360" preserveAspectRatio="none" role="img" aria-label="汇率图表"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path><g id="chart-candles"></g><g id="chart-axis"></g><g id="chart-last"></g><g id="chart-hover"></g></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div><div id="chart-tooltip" class="chart-tooltip" hidden></div></div>
+          <div class="chart-foot"><span id="chart-detail">5 分钟周期 · 近 1 天</span><span id="updated-at">等待最新报价</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div><p class="chart-help">鼠标悬停查看往时数据 · 滚轮缩放 · 按住拖动浏览历史</p>
         </section>
 
         <aside class="trade panel">
@@ -76,6 +76,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=4" defer></script>
+  <script src="./app.js?v=5" defer></script>
 </body>
 </html>
