@@ -498,7 +498,7 @@
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
-  if(GITHUB_MIRROR)$('leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
+  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
   updateShortLock();setInterval(updateShortLock,1000);
   render();refreshQuotes();refreshChart();startStream();refreshLeaderboard();
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
