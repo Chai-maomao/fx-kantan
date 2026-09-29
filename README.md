@@ -15,6 +15,7 @@
 - 行情：[BiQuote API](https://biquote.io/docs/)。网站依赖其公开接口和跨域访问；若服务或接口政策变动，行情可能不可用。
 - 角色插画：[oksmith / Open Clip Art Library](https://commons.wikimedia.org/wiki/File:Anime_girl_publicdomainq.png)，[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)。
 - 创作灵感：《FX战士久留美》；本项目与作品版权方无关联。[作品官网](https://fxkurumi-info.com/)。网站未使用该作品的图片或角色。
+- 官方影像：页面展示 YouTube 提供的 [KADOKAWAanime 主预告](https://www.youtube.com/watch?v=YcDX0ndqzqw)与[视觉预告](https://www.youtube.com/watch?v=rZwpVLm00bs)预览图，点击进入官方频道。网站不保存影像文件、剧照或海报。
 
 ## 技术说明
 
