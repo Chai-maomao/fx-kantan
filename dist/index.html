@@ -7,7 +7,7 @@
   <meta name="description" content="FX kantan! 是一个使用实时外汇行情的免费虚拟交易游戏。">
   <title>FX kantan! · 外汇模拟交易</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%230b1630'/%3E%3Cpath d='M12 42l12-11 9 7 18-19' fill='none' stroke='%2351ebc4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='19' r='5' fill='%23ff718b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css?v=4">
+  <link rel="stylesheet" href="./style.css?v=5">
 </head>
 <body>
   <div class="app-shell">
@@ -32,7 +32,7 @@
         </section>
         <section class="market panel">
           <div class="chart-heading"><div><span class="eyebrow">MARKET / 实时行情</span><h2 id="chart-title">EUR/USD</h2></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
-          <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><label>周期<select id="chart-interval"><option id="short-interval" value="30s" disabled>30 秒</option><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select></label><span id="short-lock" class="short-lock" tabindex="0" aria-describedby="short-lock-tooltip">30 秒待解锁<span id="short-lock-tooltip" class="short-lock-tooltip" role="tooltip">还需等待 120 秒</span></span><label>跨度<select id="chart-range"><option value="1h">1 小时</option><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select></label><button id="chart-reset" class="chart-reset" type="button" title="恢复完整视图">重置视图</button></div>
+          <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><div class="interval-field"><span id="chart-interval-caption">周期</span><div class="interval-picker"><select id="chart-interval" hidden aria-hidden="true" tabindex="-1"><option value="30s">30 秒</option><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select><button id="chart-interval-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="chart-interval-caption chart-interval-label"><span id="chart-interval-label">5 分</span><span aria-hidden="true">⌄</span></button><div id="chart-interval-menu" class="interval-menu" role="listbox" aria-label="K 线周期" hidden><button type="button" role="option" data-interval="30s" aria-disabled="true" aria-describedby="short-lock-tooltip">30 秒<span id="short-lock-tooltip" class="interval-tooltip" role="tooltip">还需等待 120 秒</span></button><button type="button" role="option" data-interval="1m">1 分</button><button type="button" role="option" data-interval="5m" aria-selected="true">5 分</button><button type="button" role="option" data-interval="15m">15 分</button><button type="button" role="option" data-interval="1h">1 小时</button><button type="button" role="option" data-interval="4h">4 小时</button><button type="button" role="option" data-interval="1d">1 天</button></div></div></div><label>跨度<select id="chart-range"><option value="1h">1 小时</option><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select></label><button id="chart-reset" class="chart-reset" type="button" title="恢复完整视图">重置视图</button></div>
           <div class="chart-wrap" id="chart-wrap"><svg id="chart" viewBox="0 0 800 360" preserveAspectRatio="none" role="img" aria-label="汇率图表"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path><g id="chart-candles"></g><g id="chart-axis"></g><g id="chart-last"></g><g id="chart-hover"></g></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div><div id="chart-tooltip" class="chart-tooltip" hidden></div></div>
           <div class="chart-foot"><span id="chart-detail">5 分钟周期 · 近 1 天</span><span id="updated-at">等待最新报价</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div><p class="chart-help">鼠标悬停查看往时数据 · 滚轮缩放 · 按住拖动浏览历史</p>
         </section>
@@ -63,12 +63,12 @@
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
       <section class="leaderboard panel" aria-labelledby="leaderboard-title">
-        <div class="section-head"><div><span class="eyebrow">LEADERBOARD / 公开战绩</span><h2 id="leaderboard-title">模拟交易排行榜</h2></div><button id="leaderboard-refresh" class="text-button" type="button">刷新</button></div>
-        <p class="leaderboard-intro">自愿发布名字、当前仓位和模拟收益快照。再次发布会覆盖此浏览器上次的记录；仓位变化不会自动公开。</p>
-        <form id="leaderboard-form" class="leaderboard-form"><label for="leaderboard-name">展示名</label><input id="leaderboard-name" type="text" maxlength="24" autocomplete="nickname" placeholder="输入你希望展示的名字" required><button id="leaderboard-publish" type="submit" disabled>发布我的仓位</button><button id="leaderboard-remove" class="leaderboard-remove" type="button" hidden>撤下我的记录</button></form>
+        <div class="section-head"><div><span class="eyebrow">LEADERBOARD / 盈亏榜</span><h2 id="leaderboard-title">模拟盈亏排行榜</h2></div><button id="leaderboard-refresh" class="text-button" type="button">刷新</button></div>
+        <p class="leaderboard-intro">按账户总盈亏（已实现＋未实现）排序。点击玩家可查看其最近 20 条交易记录。发布需自愿填写名字，更新后覆盖此浏览器原有记录。</p>
+        <form id="leaderboard-form" class="leaderboard-form"><label for="leaderboard-name">展示名</label><input id="leaderboard-name" type="text" maxlength="24" autocomplete="nickname" placeholder="输入你希望展示的名字" required><button id="leaderboard-publish" type="submit" disabled>发布我的盈亏</button><button id="leaderboard-remove" class="leaderboard-remove" type="button" hidden>撤下我的记录</button></form>
         <p id="leaderboard-status" class="leaderboard-status" role="status">正在读取排行榜…</p>
         <div id="leaderboard-list" class="leaderboard-list"></div>
-        <p class="leaderboard-note">只显示自愿发布的快照，收益按发布时的模拟账户计算；没有实名或反作弊验证。清除本站 Cookie 后会被视作新浏览器，旧记录将无法自行认领或撤下。</p>
+        <p class="leaderboard-note">榜单和交易记录是最近一次自愿发布的快照，不会随本地交易自动更新；没有实名或反作弊验证。清除本站 Cookie 后会被视作新浏览器，旧记录将无法自行认领或撤下。</p>
       </section>
       <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0" step="any" inputmode="decimal" placeholder="留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0" step="any" inputmode="decimal" placeholder="留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
       <section class="welcome panel">
@@ -88,6 +88,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=6" defer></script>
+  <script src="./app.js?v=7" defer></script>
 </body>
 </html>

@@ -193,17 +193,38 @@
   }
   function setLeaderboardStatus(message,kind='') { $('leaderboard-status').textContent=message;$('leaderboard-status').className=`leaderboard-status ${kind}`; }
   function boardElement(tag,className,textValue) { const el=document.createElement(tag);if(className)el.className=className;if(textValue!=null)el.textContent=textValue;return el; }
+  function renderLeaderboardHistory(detail,history) {
+    detail.replaceChildren(boardElement('p','leaderboard-detail-title','最近 20 条交易记录 · 按发布时间保存的快照'));
+    if(!history.length){detail.append(boardElement('p','leaderboard-detail-message','暂无交易记录；旧版榜单记录需由本人重新发布后才会显示。'));return;}
+    const rows=boardElement('div','leaderboard-history');
+    history.forEach(record=>{
+      const row=boardElement('div','leaderboard-history-row');
+      row.append(boardElement('small','',localTime(record.time)),boardElement('span','',`${pairName(record.symbol)} · ${record.action} · ${Number(record.units).toLocaleString()} ${record.symbol.slice(0,3)} · ${rate(Number(record.price),record.symbol)}`),boardElement('strong',record.pnl==null?'':positiveClass(record.pnl),record.pnl==null?'—':`${record.pnl>=0?'+':''}${money(record.pnl)}`));
+      rows.append(row);
+    });
+    detail.append(rows);
+  }
+  async function toggleLeaderboardDetail(button,detail,id) {
+    const open=button.getAttribute('aria-expanded')!=='true';
+    button.setAttribute('aria-expanded',String(open));detail.hidden=!open;
+    if(!open || detail.dataset.loaded==='true')return;
+    detail.replaceChildren(boardElement('p','leaderboard-detail-message','正在读取交易记录…'));
+    try {
+      const response=await fetch(`/api/leaderboard/${id}`,{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'无法读取交易记录。');
+      detail.dataset.loaded='true';if(!detail.hidden)renderLeaderboardHistory(detail,Array.isArray(data.entry?.history)?data.entry.history:[]);
+    } catch(error) {if(!detail.hidden)detail.replaceChildren(boardElement('p','leaderboard-detail-message',error.message||'无法读取交易记录，请稍后重试。'));}
+  }
   function renderLeaderboard(entries) {
     const list=$('leaderboard-list');list.replaceChildren();
-    if(!entries.length){list.append(boardElement('p','leaderboard-empty','还没有人发布仓位，快来占据第一席。'));return;}
+    if(!entries.length){list.append(boardElement('p','leaderboard-empty','还没有人发布盈亏，快来占据第一席。'));return;}
     entries.forEach((entry,index)=>{
-      const card=boardElement('article','leaderboard-entry'),head=boardElement('div','leaderboard-entry-head');
-      head.append(boardElement('span','leaderboard-rank',`#${index+1}`),boardElement('strong','leaderboard-name',entry.name),boardElement('span',`leaderboard-score ${positiveClass(entry.score)}`,`${entry.score>=0?'+':''}${money(entry.score)}`));
-      const meta=boardElement('p','leaderboard-meta',`发布于 ${localTime(entry.updatedAt)} · ${entry.positions.length} 笔持仓`);
-      const positions=boardElement('div','leaderboard-positions');
-      if(!entry.positions.length) positions.append(boardElement('span','leaderboard-position','当前空仓'));
-      else entry.positions.forEach(p=>positions.append(boardElement('span','leaderboard-position',`${pairName(p.symbol)} ${p.side==='long'?'买入':'卖出'} ${Number(p.units).toLocaleString()} ${p.symbol.slice(0,3)} · ${p.leverage}× · 入场 ${rate(p.entry,p.symbol)}${p.takeProfit==null?'':` · 止盈 ${rate(p.takeProfit,p.symbol)}`}${p.stopLoss==null?'':` · 止损 ${rate(p.stopLoss,p.symbol)}`}`)));
-      card.append(head,meta,positions);list.append(card);
+      const card=boardElement('article','leaderboard-entry'),head=boardElement('button','leaderboard-entry-toggle');
+      const detail=boardElement('div','leaderboard-detail');detail.hidden=true;
+      head.type='button';head.setAttribute('aria-expanded','false');head.setAttribute('aria-label',`查看 ${entry.name} 的最近交易记录`);
+      head.append(boardElement('span','leaderboard-rank',`#${index+1}`),boardElement('strong','leaderboard-name',entry.name),boardElement('span',`leaderboard-score ${positiveClass(entry.score)}`,`${entry.score>=0?'+':''}${money(entry.score)}`),boardElement('span','leaderboard-chevron','⌄'));
+      head.addEventListener('click',()=>toggleLeaderboardDetail(head,detail,entry.id));
+      card.append(head,boardElement('p','leaderboard-meta',`发布于 ${localTime(entry.updatedAt)}`),detail);list.append(card);
     });
   }
   async function refreshLeaderboard() {
@@ -215,19 +236,19 @@
       if(data.mine && !$('leaderboard-name').value) $('leaderboard-name').value=data.mine.name;
       $('leaderboard-remove').hidden=!data.mine;
       renderLeaderboard(Array.isArray(data.entries)?data.entries:[]);
-      setLeaderboardStatus(data.mine?'此浏览器已发布记录；再次发布会覆盖旧记录。':'填写展示名即可自愿发布仓位。','success');
+      setLeaderboardStatus(data.mine?'此浏览器已发布记录；再次发布会覆盖旧记录。':'填写展示名即可自愿发布盈亏。','success');
     } catch(error) {setLeaderboardStatus(error.message||'排行榜暂不可用，请稍后刷新。','error');}
   }
   async function publishLeaderboard(event) {
     event.preventDefault();if(leaderboardBusy)return;
     const t=totals();if(!t.complete)return setLeaderboardStatus('行情尚未齐全，暂时无法计算模拟收益。','error');
     const name=$('leaderboard-name').value.trim();if(name.length<2||name.length>24)return setLeaderboardStatus('展示名需为 2 至 24 个字。','error');
-    leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布仓位…');
+    leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布盈亏…');
     try {
-      const positions=account.positions.map(({symbol,side,units,leverage,entry,takeProfit,stopLoss})=>({symbol,side,units,leverage,entry,takeProfit,stopLoss}));
-      const response=await fetch('/api/leaderboard',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({name,balance:account.balance,floating:t.floating,positions}),signal:AbortSignal.timeout(12000)});
+      const history=account.history.slice(0,20).map(({time,symbol,action,units,price,pnl})=>({time,symbol,action,units,price,pnl}));
+      const response=await fetch('/api/leaderboard',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({name,balance:account.balance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'发布失败。');
-      leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('仓位快照已公开。此浏览器再次发布会覆盖这条记录。','success');
+      leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('盈亏和最近 20 条交易记录已公开。此浏览器再次发布会覆盖这条记录。','success');
     } catch(error) {setLeaderboardStatus(error.message||'发布失败，请稍后重试。','error');}
     finally {leaderboardBusy=false;$('leaderboard-publish').disabled=false;}
   }
@@ -242,10 +263,11 @@
   }
   function updateShortLock() {
     const remaining=Math.max(0,Math.ceil((120000-(Date.now()-PAGE_OPENED_AT))/1000));
-    $('short-interval').disabled=remaining>0;
-    $('short-lock').hidden=remaining===0;
+    $('chart-interval').options[0].disabled=remaining>0;
+    const option=document.querySelector('[data-interval="30s"]');
+    option.setAttribute('aria-disabled',String(remaining>0));
+    if(remaining)option.setAttribute('aria-describedby','short-lock-tooltip');else option.removeAttribute('aria-describedby');
     $('short-lock-tooltip').textContent=`还需等待 ${remaining} 秒`;
-    $('short-lock').setAttribute('aria-label',`30 秒 K 线还需等待 ${remaining} 秒`);
   }
   function openRiskDialog(id) {
     const p=account.positions.find(item=>item.id===id);if(!p)return;
@@ -389,6 +411,26 @@
   $('pair-list').addEventListener('click',e=>{const b=e.target.closest('[data-symbol]');if(!b||!PAIRS.includes(b.dataset.symbol))return;selected=b.dataset.symbol;chartBars=[];visibleCount=null;rightOffset=0;chartHover=-1;$('take-profit').value='';$('stop-loss').value='';render();refreshChart();});
   document.querySelector('.watch-filter').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;renderPairList();});
   document.querySelector('.segmented').addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;chartMode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(item=>{item.classList.toggle('active',item===b);item.setAttribute('aria-pressed',item===b?'true':'false');});drawChart();});
+  const intervalPicker=document.querySelector('.interval-picker'),intervalTrigger=$('chart-interval-trigger'),intervalMenu=$('chart-interval-menu');
+  function closeIntervalMenu(){intervalMenu.hidden=true;intervalTrigger.setAttribute('aria-expanded','false');}
+  intervalTrigger.addEventListener('click',()=>{
+    const open=intervalMenu.hidden;intervalMenu.hidden=!open;intervalTrigger.setAttribute('aria-expanded',String(open));
+  });
+  intervalMenu.addEventListener('click',event=>{
+    const option=event.target.closest('[data-interval]');if(!option || option.getAttribute('aria-disabled')==='true')return;
+    $('chart-interval').value=option.dataset.interval;$('chart-interval-label').textContent=option.childNodes[0].textContent.trim();
+    intervalMenu.querySelectorAll('[data-interval]').forEach(item=>item.setAttribute('aria-selected',String(item===option)));
+    closeIntervalMenu();$('chart-interval').dispatchEvent(new Event('change'));
+  });
+  intervalPicker.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){closeIntervalMenu();intervalTrigger.focus();return;}
+    if(event.key==='ArrowDown' || event.key==='ArrowUp'){
+      event.preventDefault();if(intervalMenu.hidden){intervalMenu.hidden=false;intervalTrigger.setAttribute('aria-expanded','true');}
+      const options=[...intervalMenu.querySelectorAll('[data-interval]')],current=options.indexOf(document.activeElement);
+      options[(current+(event.key==='ArrowDown'?1:-1)+options.length)%options.length].focus();
+    }
+  });
+  document.addEventListener('pointerdown',event=>{if(!intervalPicker.contains(event.target))closeIntervalMenu();});
   $('chart-interval').addEventListener('change',()=>adjustChartSelection('interval'));
   $('chart-range').addEventListener('change',()=>adjustChartSelection('range'));
   $('chart-reset').addEventListener('click',()=>{visibleCount=null;rightOffset=0;drawChart();});
