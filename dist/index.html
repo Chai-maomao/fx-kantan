@@ -7,7 +7,7 @@
   <meta name="description" content="FX kantan! 是一个使用实时外汇行情的免费虚拟交易游戏。">
   <title>FX kantan! · 外汇模拟交易</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%230b1630'/%3E%3Cpath d='M12 42l12-11 9 7 18-19' fill='none' stroke='%2351ebc4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='19' r='5' fill='%23ff718b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=2">
 </head>
 <body>
   <div class="app-shell">
@@ -17,17 +17,6 @@
     </header>
 
     <main>
-      <section class="welcome panel">
-        <div class="welcome-copy">
-          <span class="eyebrow">你的外汇练习场</span>
-          <h1>看准时机，<br><em>试试这一单。</em></h1>
-          <p>从 10,000 美元虚拟资金开始。选择货币对，观察行情，再决定买入还是卖出。</p>
-          <div class="welcome-metrics"><div><span>起始资金</span><strong>$10,000</strong></div><div><span>交易模式</span><strong>20× 模拟杠杆</strong></div></div>
-          <a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a>
-        </div>
-        <div class="hero-art"><img src="./assets/kurumi-hero.png" alt="《FX战士久留美》角色主视觉插画"></div>
-      </section>
-
       <section class="account-strip" aria-label="账户概览">
         <div><span>账户净值</span><strong id="equity">$10,000.00</strong></div>
         <div><span>可用保证金</span><strong id="free-margin">$10,000.00</strong></div>
@@ -36,33 +25,43 @@
       </section>
 
       <div class="workspace">
-        <section class="market panel">
-          <div class="section-head"><div><span class="eyebrow">MARKET / 行情</span><h2>外汇市场</h2></div><span id="updated-at" class="muted">等待最新报价</span></div>
+        <section class="watchlist panel" aria-label="货币对列表">
+          <div class="section-head"><div><span class="eyebrow">WATCHLIST / 自选</span><h2>货币对</h2></div><span class="watch-count">14</span></div>
+          <div class="watch-filter" role="group" aria-label="筛选货币对"><button type="button" class="active" data-filter="all">全部</button><button type="button" data-filter="jpy">日元</button><button type="button" data-filter="major">主流</button></div>
           <div id="pair-list" class="pair-list" role="tablist" aria-label="选择货币对"></div>
-          <div class="chart-heading"><div><span class="eyebrow">PRICE ACTION</span><h3 id="chart-title">EUR/USD</h3></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
-          <div class="chart-wrap"><svg id="chart" viewBox="0 0 800 280" preserveAspectRatio="none" role="img" aria-label="近期汇率走势图"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div></div>
-          <div class="chart-foot"><span>近 80 根 5 分钟 K 线</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div>
+        </section>
+        <section class="market panel">
+          <div class="chart-heading"><div><span class="eyebrow">MARKET / 实时行情</span><h2 id="chart-title">EUR/USD</h2></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
+          <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><label>周期<select id="chart-interval"><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select></label><label>跨度<select id="chart-range"><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select></label></div>
+          <div class="chart-wrap"><svg id="chart" viewBox="0 0 800 360" preserveAspectRatio="none" role="img" aria-label="汇率图表"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path><g id="chart-candles"></g><g id="chart-axis"></g><g id="chart-last"></g></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div></div>
+          <div class="chart-foot"><span id="chart-detail">5 分钟周期 · 近 1 天</span><span id="updated-at">等待最新报价</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div>
         </section>
 
         <aside class="trade panel">
-          <div class="section-head"><div><span class="eyebrow">TRADE / 下单</span><h2>模拟交易</h2></div><span class="pill">20×</span></div>
+          <div class="section-head"><div><span class="eyebrow">ORDER / 下单</span><h2>模拟交易</h2></div><span class="pill">虚拟</span></div>
           <div class="trade-symbol"><span id="trade-pair">EUR/USD</span><small id="trade-state">等待报价</small></div>
           <div class="bidask"><div><span>卖出 BID</span><strong id="bid">—</strong></div><div><span>买入 ASK</span><strong id="ask">—</strong></div></div>
+          <label class="field-label" for="leverage">杠杆倍数 <span>仅影响新仓保证金</span></label>
+          <select id="leverage" class="trade-select"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20" selected>20×</option><option value="50">50×</option><option value="100">100×</option></select>
           <label class="field-label" for="units">交易数量 <span>基础货币单位</span></label>
           <input id="units" type="number" min="1000" max="1000000" step="1000" value="1000" inputmode="numeric">
           <div class="quick-units"><button type="button" data-units="1000">1,000</button><button type="button" data-units="5000">5,000</button><button type="button" data-units="10000">10,000</button></div>
           <div class="order-summary"><span>预计占用保证金</span><strong id="estimated-margin">—</strong></div>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
-          <p class="trade-hint">按实时买卖价模拟成交。周末、休市或报价过期时暂停交易。</p>
+          <p class="trade-hint">按实时买卖价模拟成交。账户以美元计价；外币盈亏会按最新汇率换算。休市或报价过期时暂停交易。</p>
         </aside>
       </div>
 
       <section class="records panel">
         <div class="section-head"><div><span class="eyebrow">PORTFOLIO / 战绩</span><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
-        <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>数量</th><th>开仓价</th><th>当前平仓价</th><th>浮动盈亏</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>数量</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>浮动盈亏 USD</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
         <div class="history-head"><h3>交易记录</h3><span>只保存在当前浏览器</span></div>
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
+      </section>
+      <section class="welcome panel">
+        <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 10,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
+        <div class="hero-art"><img src="./assets/kurumi-hero.png" alt="《FX战士久留美》角色主视觉插画"></div>
       </section>
       <section id="inspiration" class="inspiration panel" aria-labelledby="inspiration-title">
         <div class="section-head"><div><span class="eyebrow">INSPIRATION / 灵感来源</span><h2 id="inspiration-title">《FX战士久留美》官方影像</h2></div><a class="official-link" href="https://fxkurumi-info.com/movie/" target="_blank" rel="noopener noreferrer">作品官网 ↗</a></div>
@@ -76,6 +75,7 @@
       <footer>FX kantan! 是受《FX战士久留美》启发的非官方娱乐项目。所有资金、订单及收益均为模拟。主视觉图片由用户提供。<a href="https://fxkurumi-info.com/" target="_blank" rel="noopener noreferrer">查看作品官网 ↗</a></footer>
     </main>
   </div>
-  <script src="./app.js" defer></script>
+  <script src="./assets/signalr.min.js" defer></script>
+  <script src="./app.js?v=4" defer></script>
 </body>
 </html>
