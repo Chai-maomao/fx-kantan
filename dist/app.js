@@ -3,9 +3,9 @@
   const PAIRS = ['EURUSD','USDJPY','GBPUSD','AUDUSD','NZDUSD','USDCHF','USDCAD','EURJPY','GBPJPY','AUDJPY','NZDJPY','CADJPY','EURGBP','EURCHF'];
   const MAJORS = new Set(PAIRS.slice(0, 7));
   const LEVERAGES = [1,2,5,10,20,50,100];
-  const PERIODS = {'30s':.5,'1m':1,'5m':5,'15m':15,'1h':60,'4h':240,'1d':1440};
+  const PERIODS = {'1m':1,'5m':5,'15m':15,'1h':60,'4h':240,'1d':1440};
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
-  const START = 10000, KEY = 'fx-kantan-paper-v1', SHORT_BARS_KEY = 'fx-kantan-30s-bars-v1', PAGE_OPENED_AT = Date.now();
+  const START = 10000, KEY = 'fx-kantan-paper-v1';
   const GITHUB_MIRROR = location.hostname.toLowerCase() === 'chai-maomao.github.io';
   const LEADERBOARD_API = GITHUB_MIRROR ? 'https://fx-kantan.top/api/leaderboard' : '/api/leaderboard';
   const MIRROR_ID_KEY = 'fx-kantan-board-id-v1';
@@ -32,12 +32,7 @@
   }
   const account = load();
   let selected = 'EURUSD', filter = 'all', quotes = {}, chartBars = [], chartMode = 'candles';
-  let visibleCount = null, rightOffset = 0, visibleBars = [], chartHover = -1, dragStart = null, shortBarsSaveTimer = 0;
-  let shortBars = {};
-  try {
-    const saved = JSON.parse(localStorage.getItem(SHORT_BARS_KEY)) || {};
-    for (const symbol of PAIRS) shortBars[symbol] = (Array.isArray(saved[symbol]) ? saved[symbol] : []).filter(b => Number.isFinite(b.time) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close) && b.time > Date.now() - 2 * 60 * 60 * 1000).sort((a,b) => a.time - b.time).slice(-240);
-  } catch { for (const symbol of PAIRS) shortBars[symbol] = []; }
+  let visibleCount = null, rightOffset = 0, visibleBars = [], chartHover = -1, dragStart = null;
   let chartRequest = 0, chartLastFetch = 0, quoteRequestRunning = false, streamConnected = false;
   let renderTimer = 0, plotTimer = 0, streamRetryTimer = 0, streamStarting = false, stream;
   let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
@@ -98,17 +93,7 @@
     const incoming = quoteTime(tick), previous = quotes[tick.symbol] || {};
     if (!Number.isFinite(incoming) || incoming < quoteTime(previous)) return false;
     quotes[tick.symbol] = {...previous,...tick,marketState:tick.marketState ?? previous.marketState ?? 'open',stale:tick.stale ?? false};
-    if (quotes[tick.symbol].marketState === 'open' && quotes[tick.symbol].stale === false) recordShortBar(quotes[tick.symbol]);
     return Boolean(currentQuote(tick.symbol));
-  }
-  function recordShortBar(tick) {
-    const time = quoteTime(tick), mid = Number(tick.mid || (Number(tick.bid) + Number(tick.ask)) / 2);
-    if (!Number.isFinite(time) || Math.abs(Date.now() - time) > 45000 || !Number.isFinite(mid) || mid <= 0 || tick.marketState === 'closed') return;
-    const bucket = Math.floor(time / 30000) * 30000, bars = shortBars[tick.symbol], last = bars[bars.length - 1];
-    if (last && bucket < last.time) return;
-    if (last && bucket === last.time) { last.high = Math.max(last.high,mid);last.low = Math.min(last.low,mid);last.close = mid; }
-    else { bars.push({time:bucket,open:mid,high:mid,low:mid,close:mid}); if (bars.length > 240) bars.shift(); }
-    if (!shortBarsSaveTimer) shortBarsSaveTimer = setTimeout(() => { shortBarsSaveTimer = 0;try { localStorage.setItem(SHORT_BARS_KEY,JSON.stringify(shortBars)); } catch {} },5000);
   }
   function renderStatus() {
     const live = PAIRS.some(s => isLive(currentQuote(s))), status = $('feed-status');
@@ -309,14 +294,6 @@
     } catch(error) {setLeaderboardStatus(error.message||'撤下失败，请稍后重试。','error');}
     finally {leaderboardBusy=false;$('leaderboard-remove').disabled=false;}
   }
-  function updateShortLock() {
-    const remaining=Math.max(0,Math.ceil((120000-(Date.now()-PAGE_OPENED_AT))/1000));
-    $('chart-interval').options[0].disabled=remaining>0;
-    const option=document.querySelector('[data-interval="30s"]');
-    option.setAttribute('aria-disabled',String(remaining>0));
-    if(remaining)option.setAttribute('aria-describedby','short-lock-tooltip');else option.removeAttribute('aria-describedby');
-    $('short-lock-tooltip').textContent=`还需等待 ${remaining} 秒`;
-  }
   function openRiskDialog(id) {
     const p=account.positions.find(item=>item.id===id);if(!p)return;
     editingPositionId=id;$('risk-pair').textContent=`${pairName(p.symbol)} · ${p.side==='long'?'买入做多':'卖出做空'} · 当前价 ${rate((currentQuote(p.symbol)?.mid),p.symbol)}`;
@@ -348,9 +325,8 @@
     chartBars = []; visibleCount = null; rightOffset = 0; chartHover = -1;
     refreshChart();
   }
-  function chartTime(stamp,axis=false) {
-    if(axis && $('chart-interval').value==='30s') return new Date(stamp).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return new Date(stamp).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',...( $('chart-interval').value === '30s' ? {second:'2-digit'} : {})});
+  function chartTime(stamp) {
+    return new Date(stamp).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
   }
   function drawHover() {
     const layer=$('chart-hover'),tooltip=$('chart-tooltip'),bar=visibleBars[chartHover];
@@ -397,18 +373,12 @@
     const q=currentQuote(selected),last=q?(q.mid||(q.bid+q.ask)/2):bars[bars.length-1].close,ly=Math.max(top,Math.min(bottom,y(last)));
     $('chart-last').innerHTML=rightOffset===0 ? `<path d="M ${left} ${ly} H ${right}" stroke="#dcefff" stroke-opacity=".45" stroke-dasharray="4 5"/><circle cx="${x(bars.length-1)}" cy="${ly}" r="3.5" fill="#dcefff"/>` : '';
     $('chart-empty').style.display='none';
-    $('chart-detail').textContent=`${$('chart-interval').selectedOptions[0].textContent}周期 · 近 ${$('chart-range').selectedOptions[0].textContent} · ${chartMode==='candles'?'K 线':'分时线'}${$('chart-interval').value==='30s'?' · 本机采集':''}${visibleCount || rightOffset?' · 自定义视图':''}`;
+    $('chart-detail').textContent=`${$('chart-interval').selectedOptions[0].textContent}周期 · 近 ${$('chart-range').selectedOptions[0].textContent} · ${chartMode==='candles'?'K 线':'分时线'}${visibleCount || rightOffset?' · 自定义视图':''}`;
     drawHover();
   }
   async function refreshChart() {
     const symbol=selected,{interval,count}=chartConfig(),request=++chartRequest;
     chartLastFetch=Date.now();
-    if (interval==='30s') {
-      chartBars=shortBars[symbol].filter(b=>b.time >= Date.now()-RANGES[$('chart-range').value]*60000).slice(-count);
-      if(chartBars.length) drawChart();
-      else {$('chart-empty').style.display='grid';$('chart-empty').textContent='正在采集 30 秒 K 线，首次使用没有往时记录。';}
-      return;
-    }
     if (!chartBars.length) { $('chart-empty').style.display='grid'; $('chart-empty').textContent='正在读取行情图表…'; }
     try {
       const response=await fetch(`https://biquote.io/api/${symbol}/ohlc?interval=${interval}&limit=${count}`,{cache:'no-store',signal:AbortSignal.timeout(12000)});
@@ -422,7 +392,6 @@
   }
   function updateCurrentBar(tick) {
     if(tick.symbol!==selected) return;
-    if($('chart-interval').value==='30s') { chartBars=shortBars[selected].filter(b=>b.time >= Date.now()-RANGES[$('chart-range').value]*60000);schedulePlot();return; }
     if(!chartBars.length) return;
     const mid=Number(tick.mid||(tick.bid+tick.ask)/2),time=quoteTime(tick);
     if(!Number.isFinite(mid)||!Number.isFinite(time)) return;
@@ -531,7 +500,6 @@
   $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
   if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
-  updateShortLock();setInterval(updateShortLock,1000);
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
   render();refreshQuotes();refreshChart();startStream();refreshLeaderboard();
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
