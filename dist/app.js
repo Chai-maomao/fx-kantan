@@ -342,6 +342,11 @@
     const interval = $('chart-interval').value, range = $('chart-range').value;
     return {interval,range,count:Math.min(500,Math.ceil(RANGES[range]/PERIODS[interval])+1)};
   }
+  function syncIntervalPicker() {
+    const select=$('chart-interval');
+    $('chart-interval-label').textContent=select.selectedOptions[0].textContent;
+    document.querySelectorAll('[data-interval]').forEach(option=>option.setAttribute('aria-selected',String(option.dataset.interval===select.value)));
+  }
   function adjustChartSelection(changed) {
     let interval = $('chart-interval').value, range = $('chart-range').value;
     const periods = Object.keys(PERIODS), ranges = Object.keys(RANGES);
@@ -354,6 +359,7 @@
       while (RANGES[range]/PERIODS[interval] < 12 && ranges.indexOf(range) < ranges.length-1) range=ranges[ranges.indexOf(range)+1];
       $('chart-range').value=range;
     }
+    syncIntervalPicker();
     chartBars = []; visibleCount = null; rightOffset = 0; chartHover = -1;
     refreshChart();
   }
@@ -467,8 +473,7 @@
   });
   intervalMenu.addEventListener('click',event=>{
     const option=event.target.closest('[data-interval]');if(!option || option.getAttribute('aria-disabled')==='true')return;
-    $('chart-interval').value=option.dataset.interval;$('chart-interval-label').textContent=option.childNodes[0].textContent.trim();
-    intervalMenu.querySelectorAll('[data-interval]').forEach(item=>item.setAttribute('aria-selected',String(item===option)));
+    $('chart-interval').value=option.dataset.interval;
     closeIntervalMenu();$('chart-interval').dispatchEvent(new Event('change'));
   });
   intervalPicker.addEventListener('keydown',event=>{
