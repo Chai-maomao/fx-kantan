@@ -41,15 +41,15 @@
           <div class="section-head"><div><span class="eyebrow">ORDER / 下单</span><h2>模拟交易</h2></div><span class="pill">虚拟</span></div>
           <div class="trade-symbol"><span id="trade-pair">EUR/USD</span><small id="trade-state">等待报价</small></div>
           <div class="bidask"><div><span>卖出 BID</span><strong id="bid">—</strong></div><div><span>买入 ASK</span><strong id="ask">—</strong></div></div>
-          <label class="field-label" for="leverage">杠杆倍数 <span>仅影响新仓保证金</span></label>
+          <label class="field-label" for="order-margin">投入保证金 <span>美元（USD）</span></label>
+          <input id="order-margin" type="number" min="1" max="1000000000" step="1" value="1000" inputmode="decimal">
+          <div class="quick-units"><button type="button" data-margin="100">$100</button><button type="button" data-margin="1000">$1,000</button><button type="button" data-margin="10000">$10,000</button></div>
+          <label class="field-label" for="leverage">杠杆倍数 <span>保证金 × 杠杆 = 仓位金额</span></label>
           <select id="leverage" class="trade-select"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20" selected>20×</option><option value="50">50×</option><option value="100">100×</option><option value="200">200×</option><option value="300">300×</option><option value="500">500×</option></select>
-          <label class="field-label" for="units">交易数量 <span id="units-currency">EUR 单位</span></label>
-          <input id="units" type="number" min="1000" max="1000000" step="1000" value="1000" inputmode="numeric">
-          <p id="units-explain" class="units-explain">1,000 表示交易 1,000 欧元（EUR）；所需保证金另行计算。</p>
-          <div class="quick-units"><button type="button" data-units="1000">1,000</button><button type="button" data-units="5000">5,000</button><button type="button" data-units="10000">10,000</button></div>
+          <p id="units-explain" class="units-explain">输入美元保证金并选择杠杆，行情接通后显示可交易的货币数量。</p>
           <div class="stop-fields"><label for="take-profit">止盈价 <input id="take-profit" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止盈"></label><label for="stop-loss">止损价 <input id="stop-loss" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止损"></label></div>
           <p class="stop-note">淡色当前价仅作参考，点数字框的小箭头或输入后才会设置；留空则不设置。做多止盈须高于开仓价，止损须低于当前卖出价；做空相反。仅在页面运行且收到行情时触发。</p>
-          <div class="order-summary"><span>预计占用保证金</span><strong id="estimated-margin">—</strong></div>
+          <div class="order-summary"><span>预计仓位金额 USD</span><strong id="estimated-margin">—</strong></div>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
           <p class="trade-hint">按实时买卖价模拟成交。账户以美元计价；外币盈亏会按最新汇率换算。休市或报价过期时暂停交易。</p>
@@ -88,6 +88,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=13" defer></script>
+  <script src="./app.js?v=14" defer></script>
 </body>
 </html>

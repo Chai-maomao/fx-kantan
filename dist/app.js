@@ -83,10 +83,15 @@
     const equity = account.balance + floating;
     return {floating,margin,equity,free:equity-margin,complete};
   }
-  function orderUnits() { return Number($('units').value); }
-  function orderMargin(symbol,units,leverage) {
-    const q = currentQuote(symbol), factor = quoteToUsd(symbol.slice(3),true);
-    return q && factor != null ? units * q.ask * factor / leverage : null;
+  function marginBudget() { return Number($('order-margin').value); }
+  function validMargin(value) { return Number.isFinite(value) && value >= 1 && value <= 1e9 && Math.abs(value * 100 - Math.round(value * 100)) < 1e-6; }
+  function orderFor(side) {
+    const budget = marginBudget(), q = currentQuote(selected), factor = quoteToUsd(selected.slice(3),true);
+    if (!validMargin(budget) || !canTrade(selected) || !q || factor == null) return null;
+    const entry = side === 'long' ? q.ask : q.bid;
+    const units = Math.floor(budget * account.leverage / (entry * factor));
+    if (!Number.isSafeInteger(units) || units < 1 || units > 1e12) return null;
+    return {units, entry, margin:units * entry * factor / account.leverage};
   }
   function showMessage(message,kind='') { $('trade-message').textContent = message; $('trade-message').className = `trade-message ${kind}`; }
   function acceptQuote(tick) {
@@ -122,17 +127,16 @@
   }
   function renderTrade() {
     const q = currentQuote(selected), live = canTrade(selected);
-    const currency = selected.slice(0,3), units = orderUnits();
+    const currency = selected.slice(0,3), budget = marginBudget(), buy = orderFor('long'), sell = orderFor('short');
     $('trade-pair').textContent = pairName(selected);
-    $('units-currency').textContent = `${CURRENCY_NAMES[currency]}（${currency}）`;
-    $('units-explain').textContent = `${Number.isFinite(units) ? units.toLocaleString('zh-CN') : '输入的数量'} 表示交易 ${Number.isFinite(units) ? units.toLocaleString('zh-CN') : '相应数量'} ${CURRENCY_NAMES[currency]}（${currency}）；所需保证金另行计算。`;
+    $('units-explain').textContent = buy && sell ? `保证金 × ${account.leverage} 倍杠杆：买入约 ${buy.units.toLocaleString('zh-CN')} / 卖出约 ${sell.units.toLocaleString('zh-CN')} ${CURRENCY_NAMES[currency]}（${currency}）。数量按整单位向下取整，实际占用略低于输入金额。` : '输入美元保证金并选择杠杆，行情接通后显示可交易的货币数量。';
     $('trade-state').textContent = !q ? '等待报价' : live ? '可交易' : q.marketState === 'open' ? '报价或换算汇率过期' : '市场休市';
     $('bid').textContent = q ? rate(q.bid,selected) : '—';
     $('ask').textContent = q ? rate(q.ask,selected) : '—';
-    const valid = Number.isInteger(units) && units >= 1000 && units <= 1000000 && units % 1000 === 0;
-    const margin = valid ? orderMargin(selected,units,account.leverage) : null, t = totals();
-    $('estimated-margin').textContent = margin == null ? '—' : money(margin);
-    $('buy-button').disabled = $('sell-button').disabled = !(live && valid && margin != null && t.complete && margin <= t.free);
+    const t = totals();
+    $('estimated-margin').textContent = validMargin(budget) ? money(budget * account.leverage) : '—';
+    $('buy-button').disabled = !(live && buy && t.complete && budget <= t.free);
+    $('sell-button').disabled = !(live && sell && t.complete && budget <= t.free);
     syncRiskReference($('take-profit'),selected);
     syncRiskReference($('stop-loss'),selected);
   }
@@ -185,12 +189,13 @@
     return null;
   }
   function trade(side) {
-    const q = currentQuote(selected), units = orderUnits();
+    const q = currentQuote(selected), budget = marginBudget();
     if (!canTrade(selected)) return showMessage('当前报价不可交易，请等待最新行情。','error');
-    if (!Number.isInteger(units) || units < 1000 || units > 1000000 || units % 1000) return showMessage('请输入 1,000 至 1,000,000 之间的整千数量。','error');
-    const margin = orderMargin(selected,units,account.leverage), t = totals();
-    if (margin == null || !t.complete || margin > t.free) return showMessage('可用保证金不足或换算汇率不可用。','error');
-    const entry = side === 'long' ? q.ask : q.bid;
+    if (!validMargin(budget)) return showMessage('请输入 1 至 1,000,000,000 美元的保证金，最多两位小数。','error');
+    const order = orderFor(side), t = totals();
+    if (!order) return showMessage('保证金不足以交易一个货币单位，或换算汇率不可用。','error');
+    if (!t.complete || budget > t.free) return showMessage('可用保证金不足或换算汇率不可用。','error');
+    const {units,entry,margin} = order;
     const takeProfit=riskValue('take-profit'),stopLoss=riskValue('stop-loss'),error=riskError(side,entry,side==='long'?q.bid:q.ask,takeProfit,stopLoss);
     if(error) return showMessage(error,'error');
     const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -487,9 +492,9 @@
   },{passive:false});
   $('leverage').value=String(account.leverage);
   $('leverage').addEventListener('change',()=>{account.leverage=Number($('leverage').value);save();renderTrade();});
-  $('units').addEventListener('input',renderTrade);
+  $('order-margin').addEventListener('input',renderTrade);
   for(const id of ['take-profit','stop-loss','risk-tp','risk-sl'])$(id).addEventListener('input',event=>{event.currentTarget.dataset.reference='false';event.currentTarget.classList.remove('reference-value');});
-  document.querySelectorAll('[data-units]').forEach(b=>b.addEventListener('click',()=>{$('units').value=b.dataset.units;renderTrade();}));
+  document.querySelectorAll('[data-margin]').forEach(b=>b.addEventListener('click',()=>{$('order-margin').value=b.dataset.margin;renderTrade();}));
   $('buy-button').addEventListener('click',()=>trade('long'));
   $('sell-button').addEventListener('click',()=>trade('short'));
   $('positions-body').addEventListener('click',e=>{const close=e.target.closest('[data-close]'),risk=e.target.closest('[data-risk]');if(close)closePosition(close.dataset.close);else if(risk)openRiskDialog(risk.dataset.risk);});
