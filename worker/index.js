@@ -84,7 +84,9 @@ async function publishEntry(db, request, identity) {
   if (history.some(record => record == null)) return json({ error:'交易记录无效。' },400,headersFor(identity));
   const balance = Number(data.balance), floating = Number(data.floating);
   if (![balance,floating].every(v => Number.isFinite(v) && Math.abs(v) <= 1e12)) return json({ error:'模拟收益数据无效。' },400,headersFor(identity));
-  const score = Math.round((balance + floating - 10000) * 100) / 100, now = Date.now();
+  const startingBalance = data.startingBalance == null ? 10000 : Number(data.startingBalance);
+  if (![10000,100000].includes(startingBalance)) return json({ error:'初始资金无效。' },400,headersFor(identity));
+  const score = Math.round((balance + floating - startingBalance) * 100) / 100, now = Date.now();
   await db.prepare('INSERT INTO leaderboard_entries (browser_id, display_name, snapshot, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(browser_id) DO UPDATE SET display_name = excluded.display_name, snapshot = excluded.snapshot, score = excluded.score, updated_at = excluded.updated_at').bind(identity.id,name,JSON.stringify({history}),score,now,now).run();
   return json({ entry:{ id:await publicId(identity.id), name, score, updatedAt:now } },200,headersFor(identity));
 }

@@ -18,8 +18,8 @@
 
     <main>
       <section class="account-strip" aria-label="账户概览">
-        <div><span>账户净值</span><strong id="equity">$10,000.00</strong></div>
-        <div><span>可用保证金</span><strong id="free-margin">$10,000.00</strong></div>
+        <div><span>账户净值</span><strong id="equity">$100,000.00</strong></div>
+        <div><span>可用保证金</span><strong id="free-margin">$100,000.00</strong></div>
         <div><span>浮动盈亏</span><strong id="floating">$0.00</strong></div>
         <div><span>已实现盈亏</span><strong id="realized">$0.00</strong></div>
       </section>
@@ -42,7 +42,7 @@
           <div class="trade-symbol"><span id="trade-pair">EUR/USD</span><small id="trade-state">等待报价</small></div>
           <div class="bidask"><div><span>卖出 BID</span><strong id="bid">—</strong></div><div><span>买入 ASK</span><strong id="ask">—</strong></div></div>
           <label class="field-label" for="leverage">杠杆倍数 <span>仅影响新仓保证金</span></label>
-          <select id="leverage" class="trade-select"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20" selected>20×</option><option value="50">50×</option><option value="100">100×</option></select>
+          <select id="leverage" class="trade-select"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20" selected>20×</option><option value="50">50×</option><option value="100">100×</option><option value="200">200×</option><option value="300">300×</option><option value="500">500×</option></select>
           <label class="field-label" for="units">交易数量 <span id="units-currency">EUR 单位</span></label>
           <input id="units" type="number" min="1000" max="1000000" step="1000" value="1000" inputmode="numeric">
           <p id="units-explain" class="units-explain">1,000 表示交易 1,000 欧元（EUR）；所需保证金另行计算。</p>
@@ -72,7 +72,7 @@
       </section>
       <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
       <section class="welcome panel">
-        <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 10,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
+        <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 100,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
         <div class="hero-art"><img src="./assets/kurumi-hero.png" alt="《FX战士久留美》角色主视觉插画"></div>
       </section>
       <section id="inspiration" class="inspiration panel" aria-labelledby="inspiration-title">
@@ -88,6 +88,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=12" defer></script>
+  <script src="./app.js?v=13" defer></script>
 </body>
 </html>

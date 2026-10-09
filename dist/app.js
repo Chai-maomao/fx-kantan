@@ -2,10 +2,10 @@
   'use strict';
   const PAIRS = ['EURUSD','USDJPY','GBPUSD','AUDUSD','NZDUSD','USDCHF','USDCAD','EURJPY','GBPJPY','AUDJPY','NZDJPY','CADJPY','EURGBP','EURCHF'];
   const MAJORS = new Set(PAIRS.slice(0, 7));
-  const LEVERAGES = [1,2,5,10,20,50,100];
+  const LEVERAGES = [1,2,5,10,20,50,100,200,300,500];
   const PERIODS = {'1m':1,'5m':5,'15m':15,'1h':60,'4h':240,'1d':1440};
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
-  const START = 10000, KEY = 'fx-kantan-paper-v1';
+  const START = 100000, KEY = 'fx-kantan-paper-v1';
   const GITHUB_MIRROR = location.hostname.toLowerCase() === 'chai-maomao.github.io';
   const LEADERBOARD_API = GITHUB_MIRROR ? 'https://fx-kantan.top/api/leaderboard' : '/api/leaderboard';
   const MIRROR_ID_KEY = 'fx-kantan-board-id-v1';
@@ -24,11 +24,12 @@
       if (!raw || !Number.isFinite(raw.balance) || !Array.isArray(raw.positions) || !Array.isArray(raw.history)) throw Error('Invalid state');
       return {
         balance:raw.balance,
+        startingBalance:[10000,START].includes(raw.startingBalance) ? raw.startingBalance : 10000,
         leverage:LEVERAGES.includes(raw.leverage) ? raw.leverage : 20,
         positions:raw.positions.filter(p => PAIRS.includes(p.symbol) && ['long','short'].includes(p.side) && Number.isFinite(p.entry) && p.entry > 0 && Number.isInteger(p.units) && p.units > 0 && Number.isFinite(p.margin) && p.margin > 0).map(p => ({...p,leverage:LEVERAGES.includes(p.leverage) ? p.leverage : 20,takeProfit:Number.isFinite(p.takeProfit)&&p.takeProfit>0?p.takeProfit:null,stopLoss:Number.isFinite(p.stopLoss)&&p.stopLoss>0?p.stopLoss:null})),
         history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
       };
-    } catch { return {balance:START,leverage:20,positions:[],history:[]}; }
+    } catch { return {balance:START,startingBalance:START,leverage:20,positions:[],history:[]}; }
   }
   const account = load();
   let selected = 'EURUSD', filter = 'all', quotes = {}, chartBars = [], chartMode = 'candles';
@@ -116,8 +117,8 @@
     $('free-margin').textContent = t.complete ? money(t.free) : '—';
     $('floating').textContent = t.complete ? money(t.floating) : '—';
     $('floating').className = positiveClass(t.floating);
-    $('realized').textContent = money(account.balance-START);
-    $('realized').className = positiveClass(account.balance-START);
+    $('realized').textContent = money(account.balance-account.startingBalance);
+    $('realized').className = positiveClass(account.balance-account.startingBalance);
   }
   function renderTrade() {
     const q = currentQuote(selected), live = canTrade(selected);
@@ -279,7 +280,7 @@
     leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布盈亏…');
     try {
       const history=account.history.slice(0,20).map(({time,symbol,action,units,price,pnl})=>({time,symbol,action,units,price,pnl}));
-      const response=await leaderboardFetch('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,balance:account.balance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
+      const response=await leaderboardFetch('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,balance:account.balance,startingBalance:account.startingBalance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'发布失败。');
       leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('盈亏和最近 20 条交易记录已公开。此浏览器再次发布会覆盖这条记录。','success');
     } catch(error) {setLeaderboardStatus(error.message||'发布失败，请稍后重试。','error');}
@@ -497,7 +498,7 @@
   $('leaderboard-form').addEventListener('submit',publishLeaderboard);
   $('leaderboard-remove').addEventListener('click',removeLeaderboard);
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
-  $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
+  $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
   if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
