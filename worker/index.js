@@ -36,7 +36,7 @@ function mirrorResponse(response, mirror) {
 }
 
 function normalizeHistory(record) {
-  if (!record || !PAIRS.has(record.symbol) || !['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓'].includes(record.action)) return null;
+  if (!record || !PAIRS.has(record.symbol) || !['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓','强制平仓'].includes(record.action)) return null;
   const units = Number(record.units), price = Number(record.price), time = Date.parse(record.time);
   const pnl = record.pnl == null ? null : Number(record.pnl);
   if (!Number.isInteger(units) || units < 1 || units > 1e12 || !Number.isFinite(price) || price <= 0 || !Number.isFinite(time) || (pnl != null && (!Number.isFinite(pnl) || Math.abs(pnl) > 1e12))) return null;

@@ -50,6 +50,8 @@
           <div class="stop-fields"><label for="take-profit">止盈价 <input id="take-profit" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止盈"></label><label for="stop-loss">止损价 <input id="stop-loss" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止损"></label></div>
           <p class="stop-note">淡色当前价仅作参考，点数字框的小箭头或输入后才会设置；留空则不设置。做多止盈须高于开仓价，止损须低于当前卖出价；做空相反。仅在页面运行且收到行情时触发。</p>
           <div class="order-summary"><span>预计仓位金额 USD</span><strong id="estimated-margin">—</strong></div>
+          <div class="liquidation-preview"><span>参考强平价</span><div><span>做多（BID） <strong id="liquidation-buy">—</strong></span><span>做空（ASK） <strong id="liquidation-sell">—</strong></span></div></div>
+          <p class="stop-note">单仓亏损达到该仓占用保证金时强平，账户其他资金不补仓。参考价随美元换算汇率变化；跳价可能使亏损超过保证金。仅在网页运行、报价有效时监控。</p>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
           <p class="trade-hint">按实时买卖价模拟成交。账户以美元计价；外币盈亏会按最新汇率换算。休市或报价过期时暂停交易。</p>
@@ -58,7 +60,7 @@
 
       <section class="records panel">
         <div class="section-head"><div><span class="eyebrow">PORTFOLIO / 战绩</span><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
-        <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>数量</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>止盈 / 止损</th><th>浮动盈亏 USD</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>投入保证金 USD</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>止盈 / 止损</th><th>浮动盈亏 USD</th><th>参考强平价</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
         <div class="history-head"><h3>交易记录</h3><span>只保存在当前浏览器</span></div>
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
@@ -88,6 +90,6 @@
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
-  <script src="./app.js?v=14" defer></script>
+  <script src="./app.js?v=15" defer></script>
 </body>
 </html>

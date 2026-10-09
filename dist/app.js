@@ -27,7 +27,7 @@
         startingBalance:[10000,START].includes(raw.startingBalance) ? raw.startingBalance : 10000,
         leverage:LEVERAGES.includes(raw.leverage) ? raw.leverage : 20,
         positions:raw.positions.filter(p => PAIRS.includes(p.symbol) && ['long','short'].includes(p.side) && Number.isFinite(p.entry) && p.entry > 0 && Number.isInteger(p.units) && p.units > 0 && Number.isFinite(p.margin) && p.margin > 0).map(p => ({...p,leverage:LEVERAGES.includes(p.leverage) ? p.leverage : 20,takeProfit:Number.isFinite(p.takeProfit)&&p.takeProfit>0?p.takeProfit:null,stopLoss:Number.isFinite(p.stopLoss)&&p.stopLoss>0?p.stopLoss:null})),
-        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
+        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓','强制平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
       };
     } catch { return {balance:START,startingBalance:START,leverage:20,positions:[],history:[]}; }
   }
@@ -83,6 +83,25 @@
     const equity = account.balance + floating;
     return {floating,margin,equity,free:equity-margin,complete};
   }
+  function liquidationPrice(p) {
+    const q=currentQuote(p.symbol),factor=quoteToUsd(p.symbol.slice(3),true);
+    if(!q || !canTrade(p.symbol) || factor==null)return null;
+    const direction=p.side==='long'?1:-1;
+    let price;
+    if(p.symbol.startsWith('USD')) {
+      const lossPerUnit=p.margin/p.units,spread=q.ask-q.bid;
+      price=(p.entry-lossPerUnit*spread/2)/(1+direction*lossPerUnit);
+    } else price=p.entry-direction*p.margin/(p.units*factor);
+    return Number.isFinite(price)&&price>0?price:null;
+  }
+  function liquidationLabel(p) {
+    const price=liquidationPrice(p);
+    return price==null?(canTrade(p.symbol)?'无正价格触发点':'等待有效报价'):rate(price,p.symbol);
+  }
+  function liquidationReached(p) {
+    const pnl=markToMarket(p);
+    return pnl!=null && pnl <= -p.margin;
+  }
   function marginBudget() { return Number($('order-margin').value); }
   function validMargin(value) { return Number.isFinite(value) && value >= 1 && value <= 1e9 && Math.abs(value * 100 - Math.round(value * 100)) < 1e-6; }
   function orderFor(side) {
@@ -135,6 +154,8 @@
     $('ask').textContent = q ? rate(q.ask,selected) : '—';
     const t = totals();
     $('estimated-margin').textContent = validMargin(budget) ? money(budget * account.leverage) : '—';
+    $('liquidation-buy').textContent=buy?liquidationLabel({...buy,symbol:selected,side:'long'}):'—';
+    $('liquidation-sell').textContent=sell?liquidationLabel({...sell,symbol:selected,side:'short'}):'—';
     $('buy-button').disabled = !(live && buy && t.complete && budget <= t.free);
     $('sell-button').disabled = !(live && sell && t.complete && budget <= t.free);
     syncRiskReference($('take-profit'),selected);
@@ -149,10 +170,10 @@
   }
   function renderRecords() {
     const body=$('positions-body'),rows=Array.from(body.querySelectorAll('tr[data-position-id]'));
-    if(!account.positions.length){if(!body.querySelector('.empty-row'))body.innerHTML='<tr class="empty-row"><td colspan="9">还没有持仓。选择货币对，试着开第一单。</td></tr>';}
+    if(!account.positions.length){if(!body.querySelector('.empty-row'))body.innerHTML='<tr class="empty-row"><td colspan="10">还没有持仓。选择货币对，试着开第一单。</td></tr>';}
     else {
       if(rows.length!==account.positions.length||rows.some((row,i)=>row.dataset.positionId!==account.positions[i].id)) {
-        body.innerHTML=account.positions.map(p=>`<tr data-position-id="${p.id}"><td><b>${pairName(p.symbol)}</b></td><td class="${p.side==='long'?'side-long':'side-short'}">${p.side==='long'?'买入':'卖出'}</td><td>${p.units.toLocaleString()}</td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td></td><td></td><td></td><td><button class="close-button" type="button" data-risk="${p.id}">设置止盈止损</button> <button class="close-button" type="button" data-close="${p.id}">平仓</button></td></tr>`).join('');
+        body.innerHTML=account.positions.map(p=>`<tr data-position-id="${p.id}"><td><b>${pairName(p.symbol)}</b></td><td class="${p.side==='long'?'side-long':'side-short'}">${p.side==='long'?'买入':'卖出'}</td><td class="position-margin"><b>${money(p.margin)}</b><small>${p.units.toLocaleString()} ${p.symbol.slice(0,3)}</small></td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td></td><td></td><td></td><td></td><td><button class="close-button" type="button" data-risk="${p.id}">设置止盈止损</button> <button class="close-button" type="button" data-close="${p.id}">平仓</button></td></tr>`).join('');
       }
       Array.from(body.rows).forEach((row,i)=>{
         const p=account.positions[i],q=currentQuote(p.symbol),pnl=markToMarket(p),exit=q?(p.side==='long'?q.bid:q.ask):null;
@@ -160,6 +181,8 @@
         row.cells[6].textContent=`${p.takeProfit==null?'—':rate(p.takeProfit,p.symbol)} / ${p.stopLoss==null?'—':rate(p.stopLoss,p.symbol)}`;
         row.cells[7].textContent=pnl==null?'—':money(pnl);
         row.cells[7].className=pnl==null?'':positiveClass(pnl);
+        row.cells[8].textContent=liquidationLabel(p);
+        row.cells[8].title='亏损达到此仓保证金时强平；按最新美元换算汇率估算，实际按触发时可成交价平仓。';
         row.querySelector('[data-close]').title=canTrade(p.symbol)?'按当前报价平仓':'报价或换算汇率过期，点击查看原因';
       });
     }
@@ -196,6 +219,8 @@
     if (!order) return showMessage('保证金不足以交易一个货币单位，或换算汇率不可用。','error');
     if (!t.complete || budget > t.free) return showMessage('可用保证金不足或换算汇率不可用。','error');
     const {units,entry,margin} = order;
+    const candidate={symbol:selected,side,units,entry,margin};
+    if(liquidationReached(candidate))return showMessage('当前点差已耗尽该仓保证金，请降低杠杆后再下单。','error');
     const takeProfit=riskValue('take-profit'),stopLoss=riskValue('stop-loss'),error=riskError(side,entry,side==='long'?q.bid:q.ask,takeProfit,stopLoss);
     if(error) return showMessage(error,'error');
     const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -221,7 +246,8 @@
     for(const p of [...account.positions]) {
       if(!canTrade(p.symbol)) continue;
       const q=currentQuote(p.symbol),exit=p.side==='long'?q.bid:q.ask;
-      if(p.takeProfit!=null && (p.side==='long'?exit>=p.takeProfit:exit<=p.takeProfit)) closePosition(p.id,'止盈平仓');
+      if(liquidationReached(p))closePosition(p.id,'强制平仓');
+      else if(p.takeProfit!=null && (p.side==='long'?exit>=p.takeProfit:exit<=p.takeProfit)) closePosition(p.id,'止盈平仓');
       else if(p.stopLoss!=null && (p.side==='long'?exit<=p.stopLoss:exit>=p.stopLoss)) closePosition(p.id,'止损平仓');
     }
   }
