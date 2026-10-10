@@ -342,10 +342,12 @@
     const interval = $('chart-interval').value, range = $('chart-range').value;
     return {interval,range,count:Math.min(500,Math.ceil(RANGES[range]/PERIODS[interval])+1)};
   }
-  function syncIntervalPicker() {
-    const select=$('chart-interval');
-    $('chart-interval-label').textContent=select.selectedOptions[0].textContent;
-    document.querySelectorAll('[data-interval]').forEach(option=>option.setAttribute('aria-selected',String(option.dataset.interval===select.value)));
+  function syncChartPickers() {
+    for(const kind of ['interval','range']) {
+      const select=$(`chart-${kind}`);
+      $(`chart-${kind}-label`).textContent=select.selectedOptions[0].textContent;
+      document.querySelectorAll(`[data-${kind}]`).forEach(option=>option.setAttribute('aria-selected',String(option.dataset[kind]===select.value)));
+    }
   }
   function adjustChartSelection(changed) {
     let interval = $('chart-interval').value, range = $('chart-range').value;
@@ -359,7 +361,7 @@
       while (RANGES[range]/PERIODS[interval] < 12 && ranges.indexOf(range) < ranges.length-1) range=ranges[ranges.indexOf(range)+1];
       $('chart-range').value=range;
     }
-    syncIntervalPicker();
+    syncChartPickers();
     chartBars = []; visibleCount = null; rightOffset = 0; chartHover = -1;
     refreshChart();
   }
@@ -466,25 +468,32 @@
   $('pair-list').addEventListener('click',e=>{const b=e.target.closest('[data-symbol]');if(!b||!PAIRS.includes(b.dataset.symbol))return;selected=b.dataset.symbol;chartBars=[];visibleCount=null;rightOffset=0;chartHover=-1;resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);render();refreshChart();});
   document.querySelector('.watch-filter').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;renderPairList();});
   document.querySelector('.segmented').addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;chartMode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(item=>{item.classList.toggle('active',item===b);item.setAttribute('aria-pressed',item===b?'true':'false');});drawChart();});
-  const intervalPicker=document.querySelector('.interval-picker'),intervalTrigger=$('chart-interval-trigger'),intervalMenu=$('chart-interval-menu');
-  function closeIntervalMenu(){intervalMenu.hidden=true;intervalTrigger.setAttribute('aria-expanded','false');}
-  intervalTrigger.addEventListener('click',()=>{
-    const open=intervalMenu.hidden;intervalMenu.hidden=!open;intervalTrigger.setAttribute('aria-expanded',String(open));
-  });
-  intervalMenu.addEventListener('click',event=>{
-    const option=event.target.closest('[data-interval]');if(!option || option.getAttribute('aria-disabled')==='true')return;
-    $('chart-interval').value=option.dataset.interval;
-    closeIntervalMenu();$('chart-interval').dispatchEvent(new Event('change'));
-  });
-  intervalPicker.addEventListener('keydown',event=>{
-    if(event.key==='Escape'){closeIntervalMenu();intervalTrigger.focus();return;}
-    if(event.key==='ArrowDown' || event.key==='ArrowUp'){
-      event.preventDefault();if(intervalMenu.hidden){intervalMenu.hidden=false;intervalTrigger.setAttribute('aria-expanded','true');}
-      const options=[...intervalMenu.querySelectorAll('[data-interval]')],current=options.indexOf(document.activeElement);
-      options[(current+(event.key==='ArrowDown'?1:-1)+options.length)%options.length].focus();
-    }
-  });
-  document.addEventListener('pointerdown',event=>{if(!intervalPicker.contains(event.target))closeIntervalMenu();});
+  const chartPickers=[];
+  for(const kind of ['interval','range']) {
+    const trigger=$(`chart-${kind}-trigger`),menu=$(`chart-${kind}-menu`),picker=trigger.parentElement;
+    const close=()=>{menu.hidden=true;trigger.setAttribute('aria-expanded','false');};
+    chartPickers.push({picker,close});
+    trigger.addEventListener('click',()=>{
+      const open=menu.hidden;chartPickers.forEach(item=>item.close());
+      menu.hidden=!open;trigger.setAttribute('aria-expanded',String(open));
+    });
+    menu.addEventListener('click',event=>{
+      const option=event.target.closest(`[data-${kind}]`);if(!option)return;
+      $(`chart-${kind}`).value=option.dataset[kind];close();trigger.focus();
+      $(`chart-${kind}`).dispatchEvent(new Event('change'));
+    });
+    picker.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){close();trigger.focus();return;}
+      if(event.key==='ArrowDown' || event.key==='ArrowUp'){
+        event.preventDefault();chartPickers.forEach(item=>{if(item.picker!==picker)item.close();});
+        menu.hidden=false;trigger.setAttribute('aria-expanded','true');
+        const options=[...menu.querySelectorAll(`[data-${kind}]`)],current=options.indexOf(document.activeElement);
+        const next=current<0?(event.key==='ArrowDown'?0:options.length-1):(current+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;
+        options[next].focus();
+      }
+    });
+  }
+  document.addEventListener('pointerdown',event=>{chartPickers.forEach(item=>{if(!item.picker.contains(event.target))item.close();});});
   $('chart-interval').addEventListener('change',()=>adjustChartSelection('interval'));
   $('chart-range').addEventListener('change',()=>adjustChartSelection('range'));
   $('chart-reset').addEventListener('click',()=>{visibleCount=null;rightOffset=0;drawChart();});
