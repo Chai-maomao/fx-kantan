@@ -5,6 +5,7 @@ const root = resolve(import.meta.dirname, '..');
 const files = {
   '/': ['dist/index.html', 'text/html; charset=utf-8'],
   '/index.html': ['dist/index.html', 'text/html; charset=utf-8'],
+  '/recovery.js': ['dist/recovery.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['dist/app.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['dist/style.css', 'text/css; charset=utf-8'],
   '/assets/signalr.min.js': ['dist/assets/signalr.min.js', 'text/javascript; charset=utf-8'],
@@ -17,5 +18,5 @@ const template = readFileSync(resolve(root, 'worker/index.js'), 'utf8');
 if (!template.includes('/* __ASSETS__ */')) throw new Error('Missing asset slot');
 mkdirSync(resolve(root, 'dist/server'), { recursive: true });
 mkdirSync(resolve(root, 'dist/.openai'), { recursive: true });
-writeFileSync(resolve(root, 'dist/server/index.js'), template.replace('/* __ASSETS__ */', `const ASSETS = ${JSON.stringify(assets)};`));
+writeFileSync(resolve(root, 'dist/server/index.js'), template.replace('/* __ASSETS__ */', `const ASSETS = ${JSON.stringify(assets)};`).replace('/* __RECOVERY__ */',readFileSync(resolve(root,'dist/recovery.js'),'utf8')));
 writeFileSync(resolve(root, 'dist/.openai/hosting.json'), readFileSync(resolve(root, '.openai/hosting.json')));

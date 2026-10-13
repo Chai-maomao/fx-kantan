@@ -1,4 +1,5 @@
 /* __ASSETS__ */
+/* __RECOVERY__ */
 
 const COOKIE_NAME = 'fxk_board_browser';
 const COOKIE_PATTERN = /^[0-9a-f-]{36}$/;
@@ -40,7 +41,7 @@ function normalizeHistory(record) {
   const units = Number(record.units), price = Number(record.price), time = Date.parse(record.time);
   const pnl = record.pnl == null ? null : Number(record.pnl);
   if (!Number.isInteger(units) || units < 1 || units > 1e12 || !Number.isFinite(price) || price <= 0 || !Number.isFinite(time) || (pnl != null && (!Number.isFinite(pnl) || Math.abs(pnl) > 1e12))) return null;
-  return { symbol:record.symbol, action:record.action, units, price, pnl, time:new Date(time).toISOString() };
+  return { symbol:record.symbol, action:record.action, units, price, pnl, time:new Date(time).toISOString(),estimated:record.estimated===true,recovery:typeof record.recovery==='string'?record.recovery.slice(0,80):undefined };
 }
 
 async function publicId(browserId) {
@@ -96,9 +97,65 @@ async function removeEntry(db, identity) {
   return json({ ok:true },200,headersFor(identity));
 }
 
+function validAccount(value) {
+  if(!value || !Number.isFinite(value.balance) || Math.abs(value.balance)>1e12 || ![10000,100000].includes(value.startingBalance) || ![1,2,5,10,20,50,100,200,300,500].includes(value.leverage))return false;
+  if(!Array.isArray(value.positions)||value.positions.length>100||!Array.isArray(value.history)||value.history.length>100)return false;
+  const ids=new Set();
+  for(const p of value.positions) {
+    if(typeof p.id!=='string'||p.id.length>100||ids.has(p.id)||!PAIRS.has(p.symbol)||!['long','short'].includes(p.side)||!Number.isSafeInteger(p.units)||p.units<1||p.units>1e12||![p.entry,p.margin].every(v=>Number.isFinite(v)&&v>0)||!Number.isFinite(Date.parse(p.time)))return false;
+    if([p.takeProfit,p.stopLoss].some(v=>v!=null&&(!Number.isFinite(v)||v<=0)))return false;
+    ids.add(p.id);
+  }
+  return value.history.every(h=>normalizeHistory(h));
+}
+async function accountEndpoint(db,request,identity) {
+  const headers=headersFor(identity),url=new URL(request.url);
+  let row=await db.prepare('SELECT snapshot, revision FROM trading_accounts WHERE browser_id = ?').bind(identity.id).first();
+  if(request.method==='GET')return json({account:row?JSON.parse(row.snapshot):null,revision:row?.revision||0},200,headers);
+  if(request.method!=='POST')return json({error:'不支持此操作。'},405,headers);
+  if(url.pathname==='/api/account/recover') {
+    if(!row)return json({account:null,revision:0,notices:[]},200,headers);
+    const account=JSON.parse(row.snapshot);
+    const symbols=[...new Set([...account.positions.map(p=>p.symbol),'EURUSD','GBPUSD','AUDUSD','NZDUSD','USDJPY','USDCHF','USDCAD'])];
+    let latest={};
+    try {
+      const params=new URLSearchParams();symbols.forEach(symbol=>params.append('symbols',symbol));
+      const response=await fetch(`https://biquote.io/api/latest?${params}`,{signal:AbortSignal.timeout(10000)});
+      if(response.ok)latest=await response.json();
+    }catch{}
+    const result=await FXRecovery.recover(account,{latest});
+    if(result.changed) {
+      const update=await db.prepare('UPDATE trading_accounts SET snapshot = ?, revision = revision + 1, updated_at = ? WHERE browser_id = ? AND revision = ?').bind(JSON.stringify(account),Date.now(),identity.id,row.revision).run();
+      if(!update.meta?.changes && !update.changes)return json({error:'另一页面更新了账户，请刷新后重试。'},409,headers);
+      row.revision++;
+    }
+    return json({account,revision:row.revision,notices:result.notices},200,headers);
+  }
+  if(!(request.headers.get('content-type')||'').startsWith('application/json'))return json({error:'需要 JSON 数据。'},415,headers);
+  const text=await request.text();if(text.length>200000)return json({error:'账户存档过大。'},413,headers);
+  let data;try{data=JSON.parse(text);}catch{return json({error:'账户存档无效。'},400,headers);}
+  if(!validAccount(data.account)||!Number.isInteger(data.revision))return json({error:'账户存档无效（最多 100 个持仓）。'},400,headers);
+  if((row?.revision||0)!==data.revision)return json({error:'另一页面更新了账户，请刷新后重试。'},409,headers);
+  if(!row) {
+    const inserted=await db.prepare('INSERT OR IGNORE INTO trading_accounts (browser_id, snapshot, revision, updated_at) VALUES (?, ?, 1, ?)').bind(identity.id,JSON.stringify(data.account),Date.now()).run();
+    if(!inserted.meta?.changes&&!inserted.changes)return json({error:'账户已建立，请刷新后重试。'},409,headers);
+  } else {
+    const updated=await db.prepare('UPDATE trading_accounts SET snapshot = ?, revision = revision + 1, updated_at = ? WHERE browser_id = ? AND revision = ?').bind(JSON.stringify(data.account),Date.now(),identity.id,data.revision).run();
+    if(!updated.meta?.changes&&!updated.changes)return json({error:'账户已更新，请刷新后重试。'},409,headers);
+  }
+  return json({revision:data.revision+1},200,headers);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if(url.pathname==='/api/account'||url.pathname==='/api/account/recover') {
+      const origin=request.headers.get('origin');
+      if(origin&&origin!==url.origin)return json({error:'账户仅供主站访问。'},403);
+      if(!env.DB)return json({error:'服务器存档暂不可用。'},503);
+      const identity=browserIdentity(request);
+      try{return await accountEndpoint(env.DB,request,identity);}catch(error){console.error('account request failed',error);return json({error:'服务器存档暂不可用，请重试。'},503,headersFor(identity));}
+    }
     if (url.pathname === '/api/leaderboard' || url.pathname.startsWith('/api/leaderboard/')) {
       const origin = request.headers.get('origin'), mirror = origin === MIRROR_ORIGIN;
       if (origin && origin !== url.origin && !mirror) return json({ error:'跨站请求被拒绝。' },403);

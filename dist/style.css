@@ -34,3 +34,5 @@
 .liquidation-preview{margin-top:12px;padding:12px;border:1px solid #704953;border-radius:9px;background:#30202d;color:#ffbec8;font-size:12px}.liquidation-preview>div{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px}.liquidation-preview strong{font-variant-numeric:tabular-nums}.records td:nth-child(9){color:#ffbec8;white-space:nowrap}
 
 .position-margin b,.position-margin small{display:block;white-space:nowrap}.position-margin small{margin-top:4px;color:#91aabd;font-size:11px}
+
+.storage-status{color:#a5c4d0;font-size:12px;line-height:1.6}.history-estimate{color:#d8b675;font-size:11px;margin-left:4px}

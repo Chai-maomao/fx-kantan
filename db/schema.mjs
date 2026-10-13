@@ -8,3 +8,10 @@ export const leaderboardEntries = sqliteTable('leaderboard_entries', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull()
 });
+
+export const tradingAccounts = sqliteTable('trading_accounts', {
+  browserId: text('browser_id').primaryKey(),
+  snapshot: text('snapshot').notNull(),
+  revision: integer('revision').notNull(),
+  updatedAt: integer('updated_at').notNull()
+});

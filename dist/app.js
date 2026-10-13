@@ -38,6 +38,62 @@
   let renderTimer = 0, plotTimer = 0, streamRetryTimer = 0, streamStarting = false, stream;
   let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
   let mirrorVisitorId = null;
+  let accountReady=false,recovering=false,serverRevision=0,syncBusy=false,syncTimer=0,syncDirty=false,checkpointAt=0;
+  function recoveryStatus(text) { $('account-storage-status').textContent=text; }
+  async function accountRequest(path='',options={}) {
+    const response=await fetch(`/api/account${path}`,{...options,credentials:'same-origin',signal:AbortSignal.timeout(120000)});
+    const data=await response.json();if(!response.ok)throw Error(data.error||'服务器存档暂不可用。');return data;
+  }
+  async function syncAccount() {
+    if(GITHUB_MIRROR||!accountReady||recovering||syncBusy||!syncDirty)return;
+    syncBusy=true;syncDirty=false;recoveryStatus('正在保存到服务器…');
+    try {
+      const data=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
+      serverRevision=data.revision;localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending',String(syncDirty));recoveryStatus('持仓已保存到服务器');
+    } catch(error) {
+      syncDirty=true;accountReady=false;recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);
+    } finally {
+      syncBusy=false;render();if(syncDirty&&accountReady)syncTimer=setTimeout(syncAccount,500);
+    }
+  }
+  async function recoverAccount(initial=false) {
+    if(recovering)return;
+    if(syncBusy)return;
+    if(!GITHUB_MIRROR&&accountReady&&syncDirty){await syncAccount();if(!accountReady)return;}
+    recovering=true;accountReady=false;recoveryStatus('正在恢复持仓并回查离线行情…');render();
+    try {
+      if(!GITHUB_MIRROR) {
+        const saved=await accountRequest();
+        serverRevision=saved.revision;
+        if(saved.account && !initial) {
+          // A save failure leaves a newer local copy. Only overwrite it when
+          // no local edits remain; conflicts require an explicit page reload.
+          if(syncDirty)throw Error('本地有未保存交易，请刷新前保留此页面并重试保存。');
+        }
+        if(saved.account) {
+          if(initial&&localStorage.getItem('fxk-server-pending')==='true') {
+            const localRevision=Number(localStorage.getItem('fxk-server-revision'));
+            if(localRevision!==serverRevision)throw Error('服务器与本地未保存交易冲突；请保留当前页面，勿重置账户。');
+            const resumed=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
+            serverRevision=resumed.revision;
+          }else Object.assign(account,saved.account);
+        }
+        else {
+          const imported=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:0})});
+          serverRevision=imported.revision;
+        }
+        const restored=await accountRequest('/recover',{method:'POST'});
+        Object.assign(account,restored.account);serverRevision=restored.revision;syncDirty=false;
+        recoveryStatus(restored.notices.length?restored.notices.join('；'):'持仓已保存到服务器，离线行情已核对');
+      } else {
+        const result=await FXRecovery.recover(account,{latest:quotes});
+        recoveryStatus(result.notices.length?result.notices.join('；'):'镜像站：本地存档，离线行情已核对');
+      }
+      localStorage.setItem(KEY,JSON.stringify(account));if(!GITHUB_MIRROR){localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','false');}$('leverage').value=String(account.leverage);accountReady=true;
+    }catch(error){recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);}
+    finally{recovering=false;render();}
+  }
+
   function leaderboardFetch(path = '', options = {}) {
     if (!GITHUB_MIRROR) return fetch(`${LEADERBOARD_API}${path}`,{...options,credentials:'same-origin'});
     if (!mirrorVisitorId) {
@@ -51,7 +107,10 @@
     headers.set('X-FXK-Visitor-ID',mirrorVisitorId);
     return fetch(`${LEADERBOARD_API}${path}`,{...options,headers,credentials:'omit'});
   }
-  function save() { try { localStorage.setItem(KEY,JSON.stringify(account)); } catch {} }
+  function save() {
+    try {localStorage.setItem(KEY,JSON.stringify(account));}catch{}
+    if(!GITHUB_MIRROR&&accountReady){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}
+  }
   function currentQuote(symbol) {
     const q = quotes[symbol];
     return q && Number.isFinite(q.bid) && Number.isFinite(q.ask) && q.bid > 0 && q.ask > q.bid ? q : null;
@@ -156,8 +215,8 @@
     $('estimated-margin').textContent = validMargin(budget) ? money(budget * account.leverage) : '—';
     $('liquidation-buy').textContent=buy?liquidationLabel({...buy,symbol:selected,side:'long'}):'—';
     $('liquidation-sell').textContent=sell?liquidationLabel({...sell,symbol:selected,side:'short'}):'—';
-    $('buy-button').disabled = !(live && buy && t.complete && budget <= t.free);
-    $('sell-button').disabled = !(live && sell && t.complete && budget <= t.free);
+    $('buy-button').disabled = !(accountReady&&!recovering&&!(syncBusy||syncDirty)&&live && buy && t.complete && budget <= t.free);
+    $('sell-button').disabled = !(accountReady&&!recovering&&!(syncBusy||syncDirty)&&live && sell && t.complete && budget <= t.free);
     syncRiskReference($('take-profit'),selected);
     syncRiskReference($('stop-loss'),selected);
   }
@@ -186,7 +245,7 @@
         row.querySelector('[data-close]').title=canTrade(p.symbol)?'按当前报价平仓':'报价或换算汇率过期，点击查看原因';
       });
     }
-    $('history-body').innerHTML = account.history.length ? account.history.map(h => `<tr><td>${localTime(h.time)}</td><td>${pairName(h.symbol)}</td><td>${h.action}</td><td>${Number(h.units).toLocaleString()}</td><td>${rate(Number(h.price),h.symbol)}</td><td class="${h.pnl == null ? '' : positiveClass(h.pnl)}">${h.pnl == null ? '—' : money(h.pnl)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="6">交易记录会显示在这里。</td></tr>';
+    $('history-body').innerHTML = account.history.length ? account.history.map(h => `<tr><td>${localTime(h.time)}</td><td>${pairName(h.symbol)}</td><td>${h.action}${h.estimated?(h.recovery==='数据不足，按强平价结算'?'<small class=history-estimate title=历史数据不足，按该仓保证金结算>（强平价估算）</small>':'<small class=history-estimate title=分钟历史行情估算>（估算）</small>'):''}</td><td>${Number(h.units).toLocaleString()}</td><td>${rate(Number(h.price),h.symbol)}</td><td class="${h.pnl == null ? '' : positiveClass(h.pnl)}">${h.pnl == null ? '—' : money(h.pnl)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="6">交易记录会显示在这里。</td></tr>';
   }
   function render() { renderStatus(); renderPairList(); renderAccount(); renderTrade(); renderChartHeading(); renderRecords(); }
   function scheduleRender() { if (!renderTimer) renderTimer = setTimeout(() => {renderTimer=0;render();},100); }
@@ -213,6 +272,8 @@
   }
   function trade(side) {
     const q = currentQuote(selected), budget = marginBudget();
+    if (!accountReady||recovering||(!GITHUB_MIRROR&&(syncBusy||syncDirty)))return showMessage('正在恢复或保存账户，请稍候。','error');
+    if(account.positions.length>=100)return showMessage('最多同时持有 100 个仓位。','error');
     if (!canTrade(selected)) return showMessage('当前报价不可交易，请等待最新行情。','error');
     if (!validMargin(budget)) return showMessage('请输入 1 至 1,000,000,000 美元的保证金，最多两位小数。','error');
     const order = orderFor(side), t = totals();
@@ -224,7 +285,7 @@
     const takeProfit=riskValue('take-profit'),stopLoss=riskValue('stop-loss'),error=riskError(side,entry,side==='long'?q.bid:q.ask,takeProfit,stopLoss);
     if(error) return showMessage(error,'error');
     const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    account.positions.unshift({id,symbol:selected,side,units,entry,margin,leverage:account.leverage,takeProfit,stopLoss,time:new Date().toISOString()});
+    account.positions.unshift({id,symbol:selected,side,units,entry,margin,leverage:account.leverage,takeProfit,stopLoss,spread:q.ask-q.bid,checkedAt:Date.now(),time:new Date().toISOString()});
     account.history.unshift({time:new Date().toISOString(),symbol:selected,action:side === 'long' ? '买入开仓' : '卖出开仓',units,price:entry,pnl:null});
     account.history = account.history.slice(0,100);
     resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);save();render();showMessage(`${pairName(selected)} 已${side === 'long' ? '买入' : '卖出'} ${units.toLocaleString()} ${selected.slice(0,3)}，杠杆 ${account.leverage}×。`,'success');
@@ -232,24 +293,31 @@
   function closePosition(id,reason='平仓') {
     const index = account.positions.findIndex(p => p.id === id);
     if (index < 0) return;
+    if(!accountReady||recovering)return showMessage('正在回查离线行情，请稍候。','error');
     const p = account.positions[index], q = currentQuote(p.symbol);
     if (!canTrade(p.symbol)) return showMessage('报价或换算汇率已过期，暂时无法平仓。','error');
-    const pnl = markToMarket(p);
+    let pnl = markToMarket(p);
     if (pnl == null) return showMessage('暂时无法计算美元盈亏。','error');
-    const price = p.side === 'long' ? q.bid : q.ask;
+    let price = p.side === 'long' ? q.bid : q.ask;
+    const estimated=reason==='强制平仓'&&p.forceFallback;
+    if(estimated){price=liquidationPrice(p)||price;pnl=-p.margin;}
     account.balance += pnl;account.positions.splice(index,1);
-    account.history.unshift({time:new Date().toISOString(),symbol:p.symbol,action:reason,units:p.units,price,pnl});
+    account.history.unshift({time:new Date().toISOString(),symbol:p.symbol,action:reason,units:p.units,price,pnl,...(estimated?{estimated:true,recovery:'数据不足，按强平价结算'}:{})});
     account.history = account.history.slice(0,100);
     save();render();showMessage(`${reason==='平仓'?'已平仓':reason+'已触发'}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}。`,pnl >= 0 ? 'success' : 'error');
   }
   function processTriggers() {
+    if(!accountReady||recovering)return;
+    if(account.positions.some(p=>Date.now()-(Number(p.checkedAt)||Date.parse(p.time))>20000)){recoverAccount();return;}
     for(const p of [...account.positions]) {
       if(!canTrade(p.symbol)) continue;
       const q=currentQuote(p.symbol),exit=p.side==='long'?q.bid:q.ask;
       if(liquidationReached(p))closePosition(p.id,'强制平仓');
       else if(p.takeProfit!=null && (p.side==='long'?exit>=p.takeProfit:exit<=p.takeProfit)) closePosition(p.id,'止盈平仓');
       else if(p.stopLoss!=null && (p.side==='long'?exit<=p.stopLoss:exit>=p.stopLoss)) closePosition(p.id,'止损平仓');
+      p.checkedAt=Date.now();p.checkedPrice=exit;p.forceFallback=false;
     }
+    if(account.positions.length&&Date.now()-checkpointAt>10000){checkpointAt=Date.now();save();}
   }
   function setLeaderboardStatus(message,kind='') { $('leaderboard-status').textContent=message;$('leaderboard-status').className=`leaderboard-status ${kind}`; }
   function boardElement(tag,className,textValue) { const el=document.createElement(tag);if(className)el.className=className;if(textValue!=null)el.textContent=textValue;return el; }
@@ -332,11 +400,11 @@
     setRiskValue($('risk-tp'),p.takeProfit,p.symbol);setRiskValue($('risk-sl'),p.stopLoss,p.symbol);$('risk-message').textContent='淡色当前价仅作参考，点箭头或输入后生效；留空可取消已有设置。';$('risk-dialog').showModal();
   }
   function saveRisk(event) {
-    event.preventDefault();const p=account.positions.find(item=>item.id===editingPositionId),q=p&&currentQuote(p.symbol);
+    event.preventDefault();if(!accountReady||recovering)return;const p=account.positions.find(item=>item.id===editingPositionId),q=p&&currentQuote(p.symbol);
     if(!p||!q||!canTrade(p.symbol)){$('risk-message').textContent='请等待该货币对的最新报价。';return;}
     const exit=p.side==='long'?q.bid:q.ask,takeProfit=riskValue('risk-tp'),stopLoss=riskValue('risk-sl');
     const error=riskError(p.side,p.entry,exit,takeProfit,stopLoss);if(error){$('risk-message').textContent=error;return;}
-    p.takeProfit=takeProfit;p.stopLoss=stopLoss;save();renderRecords();$('risk-dialog').close();editingPositionId=null;showMessage(`${pairName(p.symbol)} 的止盈止损已保存。`,'success');
+    p.takeProfit=takeProfit;p.stopLoss=stopLoss;p.checkedAt=Date.now();save();renderRecords();$('risk-dialog').close();editingPositionId=null;showMessage(`${pairName(p.symbol)} 的止盈止损已保存。`,'success');
   }
   function chartConfig() {
     const interval = $('chart-interval').value, range = $('chart-range').value;
@@ -531,7 +599,7 @@
     chartHover=-1;drawChart();pointerBar(e);
   },{passive:false});
   $('leverage').value=String(account.leverage);
-  $('leverage').addEventListener('change',()=>{account.leverage=Number($('leverage').value);save();renderTrade();});
+  $('leverage').addEventListener('change',()=>{if(!accountReady||recovering){$('leverage').value=String(account.leverage);return;}account.leverage=Number($('leverage').value);save();renderTrade();});
   $('order-margin').addEventListener('input',renderTrade);
   for(const id of ['take-profit','stop-loss','risk-tp','risk-sl'])$(id).addEventListener('input',event=>{event.currentTarget.dataset.reference='false';event.currentTarget.classList.remove('reference-value');});
   document.querySelectorAll('[data-margin]').forEach(b=>b.addEventListener('click',()=>{$('order-margin').value=b.dataset.margin;renderTrade();}));
@@ -543,11 +611,16 @@
   $('leaderboard-form').addEventListener('submit',publishLeaderboard);
   $('leaderboard-remove').addEventListener('click',removeLeaderboard);
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
-  $('reset-button').addEventListener('click',()=>{if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshQuotes();refreshChart();}});
+  $('reset-button').addEventListener('click',()=>{if(!accountReady||recovering)return;if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){recoverAccount();refreshQuotes();refreshChart();}});
   if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
-  render();refreshQuotes();refreshChart();startStream();refreshLeaderboard();
+  $('account-retry').addEventListener('click',async()=>{
+    if(syncDirty&&!GITHUB_MIRROR){accountReady=true;await syncAccount();}
+    else await recoverAccount(true);
+  });
+  render();refreshChart();
+  (async()=>{await refreshQuotes();await recoverAccount(true);startStream();refreshLeaderboard();})();
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
   setInterval(()=>{if(!document.hidden&&streamConnected)refreshQuotes();},30000);
   setInterval(()=>{if(!document.hidden)refreshChart();},20000);

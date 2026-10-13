@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {readFileSync,readdirSync} from 'node:fs';
+import vm from 'node:vm';
+import {DatabaseSync} from 'node:sqlite';
+const source=readFileSync('dist/recovery.js','utf8');
+const FX=vm.runInNewContext(source+';FXRecovery',{AbortSignal,URLSearchParams,fetch});
+const now=Date.parse('2026-10-14T12:04:00Z'),opened=now-4*60000;
+const position=(extra={})=>({id:'one',symbol:'EURUSD',side:'long',entry:1.1,units:500000,margin:1000,spread:0,time:new Date(opened).toISOString(),checkedAt:opened,...extra});
+const account=p=>({balance:100000,startingBalance:100000,leverage:500,positions:[p],history:[]});
+const candle=(time,o,l,h,c)=>({time,open:o,low:l,high:h,close:c});
+const feed={bars:async(symbol,interval,from,to)=>{
+ if(interval==='1h')return [candle(Math.floor(opened/3600000)*3600000,1.1,1.09,1.101,1.095)];
+ if(interval==='5m')return [candle(Math.floor(opened/300000)*300000,1.1,1.09,1.101,1.095)];
+ return [candle(opened,1.1,1.099,1.101,1.1),candle(opened+60000,1.1,1.097,1.101,1.099),candle(opened+120000,1.099,1.09,1.1,1.095)].filter(b=>b.time>=from&&b.time<to);
+}};
+const a=account(position());await FX.recover(a,{now,feed});assert.equal(a.positions.length,0);assert(Math.abs(a.balance-99000)<1e-7);assert.equal(a.history[0].time,new Date(opened+60000).toISOString());assert(a.history[0].estimated);
+await FX.recover(a,{now,feed});assert.equal(a.history.length,1);assert(Math.abs(a.balance-99000)<1e-7);
+const broken={bars:async()=>{throw Error('unavailable');}};
+const b=account(position());await FX.recover(b,{now,feed:broken,latest:{EURUSD:{bid:1.0942,ask:1.0943,timestamp:new Date(now).toISOString()}}});assert.equal(b.balance,99000);assert.equal(b.history[0].recovery,'数据不足，按强平价结算');
+const c=account(position());await FX.recover(c,{now,feed:broken,latest:{EURUSD:{bid:1.1001,ask:1.1002,timestamp:new Date(now).toISOString()}}});assert.equal(c.positions.length,1);assert.equal(c.balance,100000);
+const d=account(position({side:'short',entry:1.1}));await FX.recover(d,{now,feed:broken,latest:{EURUSD:{bid:1.1057,ask:1.1058,timestamp:new Date(now).toISOString()}}});assert.equal(d.balance,99000);
+const stopped=account(position({stopLoss:1.099}));await FX.recover(stopped,{now,feed});assert.equal(stopped.history[0].action,'止损平仓');
+const ambiguous=FX.classify(position({stopLoss:1.099,takeProfit:1.101}),candle(opened,1.1,1.097,1.102,1.1),1);assert(ambiguous.ambiguous);assert.equal(ambiguous.action,'止损平仓');
+const gap=FX.classify(position(),candle(opened,1.095,1.094,1.096,1.095),1);assert(gap.gap);assert.equal(gap.price,1.095);
+const database=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())database.exec(readFileSync('drizzle/'+f,'utf8').replaceAll('--> statement-breakpoint',''));
+const prepare=sql=>{const st=database.prepare(sql);const methods=values=>({bind:(...v)=>methods(v),first:async()=>st.get(...values)||null,all:async()=>({results:st.all(...values)}),run:async()=>({meta:{changes:st.run(...values).changes}})});return methods([]);};
+const worker=(await import('../dist/server/index.js')).default,env={DB:{prepare}};
+let cookie='';async function request(path,body){const headers={'origin':'https://local.test'};if(cookie)headers.cookie=cookie;if(body)headers['content-type']='application/json';const res=await worker.fetch(new Request('https://local.test'+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined}),env);if(res.headers.get('set-cookie'))cookie=res.headers.get('set-cookie').split(';')[0];return {status:res.status,data:await res.json()};}
+assert.equal((await request('/api/account')).data.account,null);
+const fresh=account(position({checkedAt:Date.now(),time:new Date().toISOString()}));
+assert.equal((await request('/api/account',{account:fresh,revision:0})).status,200);
+assert.equal((await request('/api/account')).data.account.positions[0].id,'one');
+assert.equal((await request('/api/account',{account:fresh,revision:0})).status,409);
+const wrong=await worker.fetch(new Request('https://local.test/api/account',{headers:{origin:'https://evil.test'}}),env);assert.equal(wrong.status,403);
+const actualFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({}));
+const recovered=await request('/api/account/recover',{});assert.equal(recovered.status,200);assert.equal(recovered.data.account.balance,100000);
+globalThis.fetch=actualFetch;
+
+const e=account(position({symbol:'USDJPY',entry:150,spread:.01}));await FX.recover(e,{now,feed:broken,latest:{USDJPY:{bid:149,ask:149.01,timestamp:new Date(now).toISOString()}}});assert.equal(e.balance,99000);
+const partial=account(position({time:new Date(opened+30000).toISOString(),checkedAt:opened+30000,checkedPrice:1.1}));
+await FX.recover(partial,{now:opened+60000,feed:{bars:async(s,interval)=>[candle(interval==='1h'?Math.floor(opened/3600000)*3600000:interval==='5m'?Math.floor(opened/300000)*300000:opened,1.1,1.09,1.101,1.1)]}});assert.equal(partial.positions.length,1,'pre-entry minute extreme must not close the new position');
+const tickAccount=account(position());
+await FX.recover(tickAccount,{now,feed:{...feed,ticks:async()=>[{time:opened-1,bid:1.1,ask:1.1},{time:opened+60000,bid:1.1,ask:1.1},{time:opened+65000,bid:1.0979,ask:1.0979},{time:now,bid:1.095,ask:1.095}]}});assert.equal(tickAccount.history[0].time,new Date(opened+65000).toISOString());assert.equal(tickAccount.history[0].estimated,false);
+assert.equal((await request('/api/account',{account:account(position({time:new Date(Date.now()-3600000).toISOString(),checkedAt:Date.now()-3600000})),revision:1})).status,200);
+globalThis.fetch=async url=>new Response(JSON.stringify(String(url).includes('/latest')?{EURUSD:{bid:1.0942,ask:1.0943,timestamp:new Date().toISOString()}}:{bars:[]}));
+const serverClosed=await request('/api/account/recover',{});assert.equal(serverClosed.status,200);assert.equal(serverClosed.data.account.balance,99000);assert.equal(serverClosed.data.account.positions.length,0);assert.equal(serverClosed.data.revision,3);
+const repeated=await request('/api/account/recover',{});assert.equal(repeated.data.account.balance,99000);assert.equal(repeated.data.account.history.length,1);globalThis.fetch=actualFetch;
+console.log('PASS: chronological minute recovery, exact-margin fallback, no double debit, long/short, TP/SL ambiguity, gaps, DB migrations, server persistence, revision conflicts and origin isolation');
