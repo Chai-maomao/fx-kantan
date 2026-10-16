@@ -72,6 +72,7 @@
         <div id="leaderboard-list" class="leaderboard-list"></div>
         <p class="leaderboard-note">榜单和交易记录是最近一次自愿发布的快照，不会随本地交易自动更新；没有实名或反作弊验证。清除本站 Cookie 后会被视作新浏览器，旧记录将无法自行认领或撤下。</p>
       </section>
+      <dialog id="margin-add-dialog" class="risk-dialog"><form id="margin-add-form"><h2>追加保证金</h2><p id="margin-add-pair"></p><p>当前保证金 <strong id="margin-add-current">—</strong> · 可用 <strong id="margin-add-free">—</strong></p><label for="margin-add-amount">追加金额（USD）<input id="margin-add-amount" type="number" min="1" max="1000000000" step="0.01" value="100" inputmode="decimal" required></label><p>追加后保证金 <strong id="margin-add-total">—</strong><br>参考强平价 <strong id="margin-add-price">—</strong></p><p id="margin-add-message" role="status"></p><div class="risk-actions"><button type="button" id="margin-add-cancel">取消</button><button type="submit" id="margin-add-submit">确认追加</button></div></form></dialog>
       <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
       <section class="welcome panel">
         <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 100,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
@@ -91,6 +92,6 @@
   </div>
   <script src="./assets/signalr.min.js" defer></script>
   <script src="./recovery.js?v=1" defer></script>
-  <script src="./app.js?v=18" defer></script>
+  <script src="./app.js?v=19" defer></script>
 </body>
 </html>

@@ -27,7 +27,7 @@
         startingBalance:[10000,START].includes(raw.startingBalance) ? raw.startingBalance : 10000,
         leverage:LEVERAGES.includes(raw.leverage) ? raw.leverage : 20,
         positions:raw.positions.filter(p => PAIRS.includes(p.symbol) && ['long','short'].includes(p.side) && Number.isFinite(p.entry) && p.entry > 0 && Number.isInteger(p.units) && p.units > 0 && Number.isFinite(p.margin) && p.margin > 0).map(p => ({...p,leverage:LEVERAGES.includes(p.leverage) ? p.leverage : 20,takeProfit:Number.isFinite(p.takeProfit)&&p.takeProfit>0?p.takeProfit:null,stopLoss:Number.isFinite(p.stopLoss)&&p.stopLoss>0?p.stopLoss:null})),
-        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓','强制平仓'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
+        history:raw.history.filter(h => PAIRS.includes(h.symbol) && ['买入开仓','卖出开仓','平仓','止盈平仓','止损平仓','强制平仓','追加保证金'].includes(h.action) && Number.isFinite(Number(h.price)) && Number.isFinite(Number(h.units))).slice(0,100)
       };
     } catch { return {balance:START,startingBalance:START,leverage:20,positions:[],history:[]}; }
   }
@@ -37,7 +37,7 @@
   let chartRequest = 0, chartLastFetch = 0, quoteRequestRunning = false, streamConnected = false;
   let renderTimer = 0, plotTimer = 0, streamRetryTimer = 0, streamStarting = false, stream;
   let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
-  let mirrorVisitorId = null;
+  let mirrorVisitorId = null, marginPositionId = null;
   let accountReady=false,recovering=false,serverRevision=0,syncBusy=false,syncTimer=0,syncDirty=false,checkpointAt=0;
   function recoveryStatus(text) { $('account-storage-status').textContent=text; }
   async function accountRequest(path='',options={}) {
@@ -232,10 +232,13 @@
     if(!account.positions.length){if(!body.querySelector('.empty-row'))body.innerHTML='<tr class="empty-row"><td colspan="10">还没有持仓。选择货币对，试着开第一单。</td></tr>';}
     else {
       if(rows.length!==account.positions.length||rows.some((row,i)=>row.dataset.positionId!==account.positions[i].id)) {
-        body.innerHTML=account.positions.map(p=>`<tr data-position-id="${p.id}"><td><b>${pairName(p.symbol)}</b></td><td class="${p.side==='long'?'side-long':'side-short'}">${p.side==='long'?'买入':'卖出'}</td><td class="position-margin"><b>${money(p.margin)}</b><small>${p.units.toLocaleString()} ${p.symbol.slice(0,3)}</small></td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td></td><td></td><td></td><td></td><td><button class="close-button" type="button" data-risk="${p.id}">设置止盈止损</button> <button class="close-button" type="button" data-close="${p.id}">平仓</button></td></tr>`).join('');
+        body.innerHTML=account.positions.map(p=>`<tr data-position-id="${p.id}"><td><b>${pairName(p.symbol)}</b></td><td class="${p.side==='long'?'side-long':'side-short'}">${p.side==='long'?'买入':'卖出'}</td><td class="position-margin"><b>${money(p.margin)}</b><small>${p.units.toLocaleString()} ${p.symbol.slice(0,3)}</small></td><td>${p.leverage}×</td><td>${rate(p.entry,p.symbol)}</td><td></td><td></td><td></td><td></td><td><button class="close-button" type="button" data-margin-add="${p.id}">追加保证金</button> <button class="close-button" type="button" data-risk="${p.id}">设置止盈止损</button> <button class="close-button" type="button" data-close="${p.id}">平仓</button></td></tr>`).join('');
       }
       Array.from(body.rows).forEach((row,i)=>{
         const p=account.positions[i],q=currentQuote(p.symbol),pnl=markToMarket(p),exit=q?(p.side==='long'?q.bid:q.ask):null;
+        row.cells[2].querySelector('b').textContent=money(p.margin);
+        row.cells[3].textContent=`${((p.initialMargin||p.margin)*p.leverage/p.margin).toLocaleString('zh-CN',{maximumFractionDigits:2})}×`;
+        row.cells[3].title=`初始杠杆 ${p.leverage}×；追加后显示有效杠杆`;
         row.cells[5].textContent=exit==null?'—':rate(exit,p.symbol);
         row.cells[6].textContent=`${p.takeProfit==null?'—':rate(p.takeProfit,p.symbol)} / ${p.stopLoss==null?'—':rate(p.stopLoss,p.symbol)}`;
         row.cells[7].textContent=pnl==null?'—':money(pnl);
@@ -245,9 +248,9 @@
         row.querySelector('[data-close]').title=canTrade(p.symbol)?'按当前报价平仓':'报价或换算汇率过期，点击查看原因';
       });
     }
-    $('history-body').innerHTML = account.history.length ? account.history.map(h => `<tr><td>${localTime(h.time)}</td><td>${pairName(h.symbol)}</td><td>${h.action}${h.estimated?(h.recovery==='数据不足，按强平价结算'?'<small class=history-estimate title=历史数据不足，按该仓保证金结算>（强平价估算）</small>':'<small class=history-estimate title=分钟历史行情估算>（估算）</small>'):''}</td><td>${Number(h.units).toLocaleString()}</td><td>${rate(Number(h.price),h.symbol)}</td><td class="${h.pnl == null ? '' : positiveClass(h.pnl)}">${h.pnl == null ? '—' : money(h.pnl)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="6">交易记录会显示在这里。</td></tr>';
+    $('history-body').innerHTML = account.history.length ? account.history.map(h => `<tr><td>${localTime(h.time)}</td><td>${pairName(h.symbol)}</td><td>${h.action}${h.marginAdded>0?`<small class=history-estimate>＋${money(h.marginAdded)}</small>`:''}${h.estimated?(h.recovery==='数据不足，按强平价结算'?'<small class=history-estimate title=历史数据不足，按该仓保证金结算>（强平价估算）</small>':'<small class=history-estimate title=分钟历史行情估算>（估算）</small>'):''}</td><td>${Number(h.units).toLocaleString()}</td><td>${rate(Number(h.price),h.symbol)}</td><td class="${h.pnl == null ? '' : positiveClass(h.pnl)}">${h.pnl == null ? '—' : money(h.pnl)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="6">交易记录会显示在这里。</td></tr>';
   }
-  function render() { renderStatus(); renderPairList(); renderAccount(); renderTrade(); renderChartHeading(); renderRecords(); }
+  function render() { renderStatus(); renderPairList(); renderAccount(); renderTrade(); renderChartHeading(); renderRecords();if($('margin-add-dialog').open)marginPreview(); }
   function scheduleRender() { if (!renderTimer) renderTimer = setTimeout(() => {renderTimer=0;render();},100); }
   function schedulePlot() { if (!plotTimer) plotTimer = setTimeout(() => {plotTimer=0;drawChart();},150); }
   function riskStep(symbol) { return symbol.endsWith('JPY') ? '0.001' : '0.00001'; }
@@ -378,7 +381,7 @@
     const name=$('leaderboard-name').value.trim();if(name.length<2||name.length>24)return setLeaderboardStatus('展示名需为 2 至 24 个字。','error');
     leaderboardBusy=true;$('leaderboard-publish').disabled=true;setLeaderboardStatus('正在发布盈亏…');
     try {
-      const history=account.history.slice(0,20).map(({time,symbol,action,units,price,pnl})=>({time,symbol,action,units,price,pnl}));
+      const history=account.history.slice(0,20).map(({time,symbol,action,units,price,pnl,marginAdded})=>({time,symbol,action,units,price,pnl,marginAdded}));
       const response=await leaderboardFetch('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,balance:account.balance,startingBalance:account.startingBalance,floating:t.floating,history}),signal:AbortSignal.timeout(12000)});
       const data=await response.json();if(!response.ok)throw Error(data.error||'发布失败。');
       leaderboardMine=data.entry;await refreshLeaderboard();setLeaderboardStatus('盈亏和最近 20 条交易记录已公开。此浏览器再次发布会覆盖这条记录。','success');
@@ -393,6 +396,39 @@
       leaderboardMine=null;await refreshLeaderboard();setLeaderboardStatus('你的公开记录已撤下。','success');
     } catch(error) {setLeaderboardStatus(error.message||'撤下失败，请稍后重试。','error');}
     finally {leaderboardBusy=false;$('leaderboard-remove').disabled=false;}
+  }
+  function marginPreview() {
+    const p=account.positions.find(item=>item.id===marginPositionId);
+    if(!p){$('margin-add-message').textContent='该仓位已平仓。';$('margin-add-submit').disabled=true;return;}
+    const amount=Number($('margin-add-amount').value),t=totals();
+    const valid=validMargin(amount)&&amount<=t.free&&t.complete;
+    $('margin-add-current').textContent=money(p.margin);
+    $('margin-add-free').textContent=t.complete?money(t.free):'等待有效报价';
+    $('margin-add-total').textContent=valid?money(p.margin+amount):'—';
+    $('margin-add-price').textContent=valid?liquidationLabel({...p,margin:p.margin+amount}):'—';
+    $('margin-add-submit').disabled=!(valid&&accountReady&&!recovering&&!syncBusy&&!syncDirty&&canTrade(p.symbol));
+    $('margin-add-message').textContent=!valid?'请输入不超过可用保证金的金额（至少 $1，最多两位小数）。':'只增加该仓保证金，不加仓；数量与开仓价保持不变。';
+  }
+  function openMarginDialog(id) {
+    const p=account.positions.find(item=>item.id===id);if(!p)return;
+    marginPositionId=id;$('margin-add-pair').textContent=`${pairName(p.symbol)} · ${p.side==='long'?'买入做多':'卖出做空'}`;
+    $('margin-add-amount').value='100';marginPreview();$('margin-add-dialog').showModal();
+  }
+  function addMargin(event) {
+    event.preventDefault();
+    if(!accountReady||recovering||syncBusy||syncDirty){$('margin-add-message').textContent='请等待账户恢复或存档完成。';return;}
+    processTriggers();
+    if(!accountReady||recovering)return;
+    const p=account.positions.find(item=>item.id===marginPositionId),amount=Number($('margin-add-amount').value),t=totals();
+    if(!p){marginPreview();return;}
+    if(!canTrade(p.symbol)||!t.complete){$('margin-add-message').textContent='请等待有效报价。';return;}
+    if(!validMargin(amount)||amount>t.free){marginPreview();return;}
+    p.initialMargin=p.initialMargin||p.margin;p.margin+=amount;p.checkedAt=Date.now();
+    const q=currentQuote(p.symbol);p.checkedPrice=p.side==='long'?q.bid:q.ask;
+    account.history.unshift({time:new Date().toISOString(),symbol:p.symbol,action:'追加保证金',units:p.units,price:p.checkedPrice,pnl:null,marginAdded:amount,positionId:p.id});
+    account.history=account.history.slice(0,100);
+    save();render();$('margin-add-dialog').close();marginPositionId=null;
+    showMessage(`${pairName(p.symbol)} 已追加 ${money(amount)} 保证金，累计 ${money(p.margin)}。`,'success');
   }
   function openRiskDialog(id) {
     const p=account.positions.find(item=>item.id===id);if(!p)return;
@@ -605,7 +641,10 @@
   document.querySelectorAll('[data-margin]').forEach(b=>b.addEventListener('click',()=>{$('order-margin').value=b.dataset.margin;renderTrade();}));
   $('buy-button').addEventListener('click',()=>trade('long'));
   $('sell-button').addEventListener('click',()=>trade('short'));
-  $('positions-body').addEventListener('click',e=>{const close=e.target.closest('[data-close]'),risk=e.target.closest('[data-risk]');if(close)closePosition(close.dataset.close);else if(risk)openRiskDialog(risk.dataset.risk);});
+  $('positions-body').addEventListener('click',e=>{const close=e.target.closest('[data-close]'),risk=e.target.closest('[data-risk]'),margin=e.target.closest('[data-margin-add]');if(close)closePosition(close.dataset.close);else if(risk)openRiskDialog(risk.dataset.risk);else if(margin)openMarginDialog(margin.dataset.marginAdd);});
+  $('margin-add-form').addEventListener('submit',addMargin);
+  $('margin-add-amount').addEventListener('input',marginPreview);
+  $('margin-add-cancel').addEventListener('click',()=>{$('margin-add-dialog').close();marginPositionId=null;});
   $('risk-form').addEventListener('submit',saveRisk);
   $('risk-cancel').addEventListener('click',()=>{$('risk-dialog').close();editingPositionId=null;});
   $('leaderboard-form').addEventListener('submit',publishLeaderboard);
