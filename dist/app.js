@@ -40,9 +40,30 @@
   let mirrorVisitorId = null, marginPositionId = null;
   let accountReady=false,recovering=false,serverRevision=0,syncBusy=false,syncTimer=0,syncDirty=false,checkpointAt=0;
   function recoveryStatus(text) { $('account-storage-status').textContent=text; }
+  function sameAccountSnapshot(a,b) {
+    const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+    return stable(a)===stable(b);
+  }
   async function accountRequest(path='',options={}) {
-    const response=await fetch(`/api/account${path}`,{...options,credentials:'same-origin',signal:AbortSignal.timeout(120000)});
-    const data=await response.json();if(!response.ok)throw Error(data.error||'服务器存档暂不可用。');return data;
+    let lastError;
+    for(let attempt=0;attempt<2;attempt++) {
+      try {
+        const response=await fetch(`/api/account${path}`,{...options,credentials:'same-origin',signal:AbortSignal.timeout(20000)});
+        const text=await response.text();let data;
+        try {data=JSON.parse(text);}catch {
+          const hint=response.status===403?'请求被访问保护拦截':response.status===429?'请求过于频繁':response.status>=500?'服务暂时不可用或回查超时':'返回了网页而非账户数据';
+          const error=Error(`账户接口${hint}（HTTP ${response.status}）。`);error.retryable=response.status>=500||response.status===200;throw error;
+        }
+        if(!response.ok){const error=Error(data.error||`服务器存档暂不可用（HTTP ${response.status}）。`);error.retryable=response.status>=500;throw error;}
+        if(!data||typeof data!=='object'||!Number.isInteger(data.revision))throw Error('账户接口返回的数据不完整，请重试。');
+        return data;
+      }catch(error){
+        lastError=error;
+        if(attempt===1||!(error.retryable||error.name==='TimeoutError'||error.name==='TypeError'))break;
+      }
+    }
+    if(lastError?.name==='TimeoutError'||lastError?.name==='TypeError')throw Error('账户接口连接失败或超时，请稍后重试。');
+    throw lastError;
   }
   async function syncAccount() {
     if(GITHUB_MIRROR||!accountReady||recovering||syncBusy||!syncDirty)return;
@@ -73,9 +94,14 @@
         if(saved.account) {
           if(initial&&localStorage.getItem('fxk-server-pending')==='true') {
             const localRevision=Number(localStorage.getItem('fxk-server-revision'));
-            if(localRevision!==serverRevision)throw Error('服务器与本地未保存交易冲突；请保留当前页面，勿重置账户。');
-            const resumed=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
-            serverRevision=resumed.revision;
+            if(localRevision!==serverRevision) {
+              if(!sameAccountSnapshot(account,saved.account))throw Error('服务器与本地未保存交易冲突；请保留当前页面，勿重置账户。');
+              // The server committed this exact local snapshot; only its reply was lost.
+              Object.assign(account,saved.account);
+            }else {
+              const resumed=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
+              serverRevision=resumed.revision;
+            }
           }else Object.assign(account,saved.account);
         }
         else {

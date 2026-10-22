@@ -32,14 +32,19 @@ const FXRecovery = (() => {
     const adverseHits=hits.filter(l=>l.adverse).sort((a,b)=>sign*(b.price-a.price));
     return {...(adverseHits[0]||hits[0]),ambiguous:adverseHits.length>0&&hits.some(l=>!l.adverse)};
   }
-  function createFeed(fetcher=fetch) {
-    const cache=new Map();let requests=0;
+  function createFeed(fetcher=fetch,{budgetMs=12000,requestTimeoutMs=3000}={}) {
+    const cache=new Map();let requests=0;const deadline=Date.now()+budgetMs;
+    function requestSignal() {
+      const remaining=deadline-Date.now();
+      if(remaining<=0)throw Error('历史回查时间预算已用尽');
+      return AbortSignal.timeout(Math.max(1,Math.min(remaining,requestTimeoutMs)));
+    }
     async function bars(symbol,interval,from,to) {
       const key=[symbol,interval,from,to].join(':');
       if(!cache.has(key))cache.set(key,(async()=>{
         if(++requests>40)throw Error('历史回查请求上限');
         const params=new URLSearchParams({interval,limit:'1000',from:new Date(from).toISOString(),to:new Date(to).toISOString()});
-        const response=await fetcher(`https://biquote.io/api/${symbol}/ohlc?${params}`,{signal:AbortSignal.timeout(10000)});
+        const response=await fetcher(`https://biquote.io/api/${symbol}/ohlc?${params}`,{signal:requestSignal()});
         if(!response.ok)throw Error('历史行情暂不可用');
         const data=await response.json();
         return (data.bars||[]).map(b=>({...b,time:Date.parse(b.openTime)})).filter(b=>b.time>=from&&b.time<to&&[b.open,b.high,b.low,b.close].every(v=>Number.isFinite(v)&&v>0)&&b.low<=Math.min(b.open,b.close)&&b.high>=Math.max(b.open,b.close)).sort((a,b)=>a.time-b.time);
@@ -50,7 +55,7 @@ const FXRecovery = (() => {
       const key='ticks:'+symbol;
       if(!cache.has(key))cache.set(key,(async()=>{
         if(++requests>40)throw Error('历史回查请求上限');
-        const response=await fetcher(`https://biquote.io/api/${symbol}/history?count=1000`,{signal:AbortSignal.timeout(10000)});
+        const response=await fetcher(`https://biquote.io/api/${symbol}/history?count=1000`,{signal:requestSignal()});
         if(!response.ok)throw Error('逐笔历史不可用');
         const data=await response.json();
         return (Array.isArray(data)?data:data.ticks||data.items||[]).map(t=>({...t,time:Date.parse(t.timestamp||t.lastQuoteAt)})).filter(t=>Number.isFinite(t.time)&&Number(t.bid)>0&&Number(t.ask)>=Number(t.bid)).sort((a,b)=>a.time-b.time);

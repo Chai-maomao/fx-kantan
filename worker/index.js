@@ -117,14 +117,15 @@ async function accountEndpoint(db,request,identity) {
   if(url.pathname==='/api/account/recover') {
     if(!row)return json({account:null,revision:0,notices:[]},200,headers);
     const account=JSON.parse(row.snapshot);
+    if(!account.positions.length)return json({account,revision:row.revision,notices:[]},200,headers);
     const symbols=[...new Set([...account.positions.map(p=>p.symbol),'EURUSD','GBPUSD','AUDUSD','NZDUSD','USDJPY','USDCHF','USDCAD'])];
     let latest={};
     try {
       const params=new URLSearchParams();symbols.forEach(symbol=>params.append('symbols',symbol));
-      const response=await fetch(`https://biquote.io/api/latest?${params}`,{signal:AbortSignal.timeout(10000)});
+      const response=await fetch(`https://biquote.io/api/latest?${params}`,{signal:AbortSignal.timeout(3000)});
       if(response.ok)latest=await response.json();
     }catch{}
-    const result=await FXRecovery.recover(account,{latest});
+    const result=await FXRecovery.recover(account,{latest,feed:FXRecovery.createFeed(fetch,{budgetMs:8000,requestTimeoutMs:2500})});
     if(result.changed) {
       const update=await db.prepare('UPDATE trading_accounts SET snapshot = ?, revision = revision + 1, updated_at = ? WHERE browser_id = ? AND revision = ?').bind(JSON.stringify(account),Date.now(),identity.id,row.revision).run();
       if(!update.meta?.changes && !update.changes)return json({error:'另一页面更新了账户，请刷新后重试。'},409,headers);
@@ -136,6 +137,8 @@ async function accountEndpoint(db,request,identity) {
   const text=await request.text();if(text.length>200000)return json({error:'账户存档过大。'},413,headers);
   let data;try{data=JSON.parse(text);}catch{return json({error:'账户存档无效。'},400,headers);}
   if(!validAccount(data.account)||!Number.isInteger(data.revision))return json({error:'账户存档无效（最多 100 个持仓）。'},400,headers);
+  // A prior save may have committed even when the gateway lost its response.
+  if(row&&row.revision===data.revision+1&&row.snapshot===JSON.stringify(data.account))return json({revision:row.revision,replayed:true},200,headers);
   if((row?.revision||0)!==data.revision)return json({error:'另一页面更新了账户，请刷新后重试。'},409,headers);
   if(!row) {
     const inserted=await db.prepare('INSERT OR IGNORE INTO trading_accounts (browser_id, snapshot, revision, updated_at) VALUES (?, ?, 1, ?)').bind(identity.id,JSON.stringify(data.account),Date.now()).run();
