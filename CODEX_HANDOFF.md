@@ -1,31 +1,24 @@
 # FX kantan! 交接
 
-- 阶段：现有娱乐模拟交易站的维护；主站 `https://fx-kantan.top/`，GitHub 镜像 `https://chai-maomao.github.io/fx-kantan/`。
-- 本次玩家目标：止盈止损显示当前参考价，可用数字框箭头调整；实时行情更新不再替换持仓平仓按钮；暂不能平仓时给出原因。
-- 主要文件：`dist/app.js`、`dist/index.html`、`dist/style.css`。个人交易数据在浏览器本地；排行榜在主站 D1，GitHub 镜像仍访问主站榜单。
-- 本地验证：Node 构建及语法检查通过；本地浏览器验证了参考价、EUR/USD 与 USD/JPY 步长、未编辑参考价不创建止盈止损、修改已有止盈价、报价变动时按钮节点不被替换、手动平仓。
-- 部署：先在本地验证，再更新 GitHub Pages 与 Sites 主站；保持已发布站点可回退。封面制作文件位于仓库外 `../cover-art/`，未使用生图模型。
-- 后续：发布后确认主站和镜像加载新版本；若再发现按钮失灵，先复现具体行情状态、是否触发自动止盈止损，再检查事件目标与报错。
+## 当前状态
+- 主站 https://fx-kantan.top/；原生 Sites https://fx-kantan-sim.ycn3258823137.chatgpt.site；GitHub https://chai-maomao.github.io/fx-kantan/。
+- Cloudflare Worker https://fx-kantan-gateway.cardex-online.workers.dev，配置 cloudflare/wrangler.jsonc，MAIN_ORIGIN 固定原生 Sites 防止代理循环。
+- fx-kantan.top 已通过用户登录的 Cloudflare UI 加入 Free，当前仍是 pending nameserver。扫描记录有两个根 A（172.66.3.26 / 162.159.143.30）及 _cf-custom-hostname TXT。没有修改 Spaceship NS，也未关闭 DNSSEC。
+- Cloudflare 分配 NS：etta.ns.cloudflare.com、finley.ns.cloudflare.com。当前旧 NS：launch1.spaceship.net、launch2.spaceship.net。激活前核对/迁移 DNSSEC，不能直接带旧 DS 换 NS。
+- 已打开 Wrangler OAuth 授权页，等待用户点击 Authorize（新增 workers_routes:write、zone:read；保留现有 account/user/workers_scripts/d1 范围）。授权会话有时效，超时需重新运行 login；不要自行创建/索取 API token。
 
-2026-09-30：移除 30 秒 K 线选项、等待提示、本机聚合和缓存读写；最短周期为 1 分钟。
+## 本次更改
+- GitHub 账户与榜单请求经 Cloudflare gateway，Origin 严格限定 GitHub，预检支持 Content-Type / X-FXK-Visitor-ID；镜像继续使用既有匿名 UUID，首次导入本地旧存档到原站 D1。
+- 主站 Cookie 账户和 GitHub UUID 账户各自保留，不自动跨域合并；Cloudflare 原域名下切换网页线路始终代理同一个主站 Cookie 账户。
+- 可用保证金 = 账户余额 − 已用保证金；浮动盈亏仅反映净值。追加保证金、仓位强平及存档机制保留。
+- 图表启动同步浏览器恢复选项，按 from/to 日历时间取数，拒绝错币种/错周期或过期异步结果。
 
-2026-10-10：新增 200/300/500 倍杠杆，新账户及重置资金改为 100,000 美元。旧账户默认盈亏基准 10,000；startingBalance 随存档及榜单请求传递，服务端兼容旧请求。
+## 验证
+- tests/chart.test.mjs、gateway.test.mjs、account-network.test.mjs、recovery.test.mjs、margin.test.mjs 全通过；增加 GitHub 账户 CORS/身份隔离、可用保证金不随浮盈浮亏变化用例。
+- 发布顺序：先 Sites（提供镜像账户 API），再 Cloudflare（代理/CORS与静态资源），最后推 GitHub main 触发 Pages。
 
-下单改为美元保证金＋杠杆，按买入 ask/卖出 bid 和美元换算汇率计算整数单位；保证金预算检查可用资金，旧持仓兼容，榜单数量范围同步扩展。
-
-新增参考强平价预览/持仓列和单仓亏损达到保证金自动强平；有效行情触发，强平优先于止盈止损；存档及榜单接受强制平仓记录。旧持仓使用原保证金，发布后规则同样生效。
-
-修复跨度自动调整周期后自定义菜单标签/选中状态不同步：统一从真实 select 值同步。1m→1w 自动改为 1h，菜单与请求一致。
-
-跨度控件统一为周期同款自定义下拉菜单，共用鼠标/键盘逻辑与标签同步；两个菜单互斥展开。
-
-2026-10-14：主站 /api/account 与 /recover 保存完整账户到 D1，新 migration 0001；Cookie 身份、revision CAS，原本机存档首次导入，本地保留备份。镜像本地回查。共享 dist/recovery.js 通过 build-worker 内嵌服务端；日/小时→5m→1m→有覆盖的最近逐笔。数据不足当前越强平线时按该仓 margin 结算；当前安全时不凭空强平。初始/断流/visibility 恢复在结算前完成；交易存档约 200ms 同步，在线 checkpoint 10s。没有定时后台行情监控，也不修改已结算旧历史。
-测试 tests/recovery.test.mjs 覆盖强平回查、精确扣保证金 fallback、重复恢复、方向、止损/止盈歧义、跳空、数据库迁移/保存/CAS/跨站隔离；本地浏览器验证旧账导入、开仓保存、刷新恢复、平仓同步，无 JS 报错。
-
-2026-10-16：每仓新增追加保证金弹窗，预览可用/累计保证金及强平价；提交复核并先处理风险触发。数量、开仓价、余额不变，占用保证金增加，有效杠杆列更新。追加记录含 marginAdded，服务端/本地 history 兼容；复用账户快照无需迁移。
-
-2026-10-22：爆仓时账户接口返回 HTML 的报错防护。客户端按状态处理非 JSON，有限重试；同版本同快照重发支持幂等确认，避免保存已成功但响应丢失后进入永久冲突。服务端回查总预算 8s、最新行情 3s，空仓直接返回，避免长回查拖成网关 HTML。现场网络主站 TLS 握手失败，不能据此确定用户的具体网关状态。
-
-2026-10-26：Cloudflare 分流入口部署 fx-kantan-gateway.cardex-online.workers.dev。gateway.mjs 浏览器探测原生主站 /api/health，main 网页代理/cloud 静态网页；两路交易 API、匿名 Cookie、localStorage key 一致，都用原站 D1。明确禁止副站独立交易账本。fx-kantan.top 未接入该 Cloudflare 账户，未改 DNS/NS；域名切换仍需 zone 和 Custom Domain，迁移时保留账号 Cookie/原站数据并协调 DNSSEC。安装 Wrangler 位于忽略的 .cloudflare/tools，现 OAuth 可部署 Worker，但没有 zone 可直接绑定。图表启动用 adjustChartSelection('range') 同步浏览器恢复值，from/to 时间过滤、拒绝币种/周期错配及过期请求；tests/chart.test.mjs、gateway.test.mjs 和全部账务回归通过。
-
-Cloudflare 添加 zone 的实际 API 返回 403，缺少 com.cloudflare.api.account.zone.create 权限；未创建 zone、未改注册商 NS。后续需用户在 Cloudflare 后台添加 fx-kantan.top（Free）并授权/完成 DNS 接入，然后绑定现有 Worker。临时 workers.dev 与 fx-kantan.top 不同域名，浏览器 Cookie 自然不同，不能把临时网址视作旧账户入口。
+## 部署
+- Sites plugin 1.1.2 的 site-workflow.mjs 已能在 Windows 正常打包。
+- Cloudflare：node scripts/build-cloudflare.mjs；node .cloudflare/tools/node_modules/wrangler/bin/wrangler.js deploy --config cloudflare/wrangler.jsonc。
+- .cloudflare/tools 为忽略的本地 Wrangler 4.152.0；安装需关闭失效的 127.0.0.1:7890 代理，显式 Windows workerd 依赖已修好。
+- 不暴露源站凭据或 Cloudflare token。没有后台持续轮询所有离线账户，恢复时补算历史；数据不足且越线按单仓保证金结算。已结算旧账不追溯改写。

@@ -19,7 +19,7 @@
     <main>
       <section class="account-strip" aria-label="账户概览">
         <div><span>账户净值</span><strong id="equity">$100,000.00</strong></div>
-        <div><span>可用保证金</span><strong id="free-margin">$100,000.00</strong></div>
+        <div><span title="账户余额减去持仓保证金；未实现盈亏不计入">可用保证金</span><strong id="free-margin">$100,000.00</strong></div>
         <div><span>浮动盈亏</span><strong id="floating">$0.00</strong></div>
         <div><span>已实现盈亏</span><strong id="realized">$0.00</strong></div>
       </section>
@@ -61,7 +61,7 @@
       <section class="records panel">
         <div class="section-head"><div><span class="eyebrow">PORTFOLIO / 战绩</span><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
         <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>投入保证金 USD</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>止盈 / 止损</th><th>浮动盈亏 USD</th><th>参考强平价</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
-        <p class="storage-status"><span id="account-storage-status" role="status">正在恢复账户…</span> <button id="account-retry" type="button" class="text-button">重试存档 / 回查</button></p><div class="history-head"><h3>交易记录</h3><span>主站保存到服务器 · 镜像保存在本机</span></div>
+        <p class="storage-status"><span id="account-storage-status" role="status">正在恢复账户…</span> <button id="account-retry" type="button" class="text-button">重试存档 / 回查</button></p><div class="history-head"><h3>交易记录</h3><span>交易存档保存在服务器 · 本机保留备份</span></div>
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
       <section class="leaderboard panel" aria-labelledby="leaderboard-title">
@@ -92,6 +92,6 @@
   </div>
   <script src="./assets/signalr.min.js" defer></script>
   <script src="./recovery.js?v=2" defer></script>
-  <script src="./app.js?v=21" defer></script>
+  <script src="./app.js?v=22" defer></script>
 </body>
 </html>

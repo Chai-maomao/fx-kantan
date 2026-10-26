@@ -48,4 +48,12 @@ const serverClosed=await request('/api/account/recover',{});assert.equal(serverC
 const repeated=await request('/api/account/recover',{});assert.equal(repeated.data.account.balance,99000);assert.equal(repeated.data.account.history.length,1);globalThis.fetch=actualFetch;
 const added=account(position({time:new Date().toISOString(),checkedAt:Date.now(),margin:1250.5,initialMargin:1000}));added.history=[{time:new Date().toISOString(),symbol:'EURUSD',action:'追加保证金',units:500000,price:1.1,pnl:null,marginAdded:250.5}];
 assert.equal((await request('/api/account',{account:added,revision:3})).status,200);const restoredMargin=await request('/api/account');assert.equal(restoredMargin.data.account.positions[0].margin,1250.5);assert.equal(restoredMargin.data.account.history[0].marginAdded,250.5);
+const mirrorID='12345678-1234-4234-8234-123456789abc';
+async function mirrorAccount(method='GET',data){const r=await worker.fetch(new Request('https://local.test/api/account',{method,headers:{origin:'https://chai-maomao.github.io','x-fxk-visitor-id':mirrorID,'content-type':'application/json'},body:data?JSON.stringify(data):undefined}),env);return {response:r,data:r.status===204?null:await r.json()};}
+const preflight=await mirrorAccount('OPTIONS');assert.equal(preflight.response.status,204);assert.equal(preflight.response.headers.get('access-control-allow-origin'),'https://chai-maomao.github.io');
+assert.equal((await mirrorAccount()).data.account,null);
+const mirrored={balance:12345,startingBalance:100000,leverage:20,positions:[],history:[]};
+assert.equal((await mirrorAccount('POST',{account:mirrored,revision:0})).response.status,200);
+assert.equal((await mirrorAccount()).data.account.balance,12345);
+assert.notEqual((await request('/api/account')).data.account.balance,12345);
 console.log('PASS: chronological minute recovery, exact-margin fallback, no double debit, long/short, TP/SL ambiguity, gaps, DB migrations, server persistence, revision conflicts and origin isolation');

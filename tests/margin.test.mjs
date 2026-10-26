@@ -15,3 +15,10 @@ const a=run(250.5,10000);assert.equal(a.p.margin,1250.5);assert.equal(a.p.initia
 for(const amount of [0,-1,0.5,1.001,10001,Infinity]){const b=run(amount,10000);assert.equal(b.p.margin,1000);assert.equal(b.saved,false);}
 assert.equal(run(100,10000,{closed:true}).saved,false);assert.equal(run(100,10000,{ready:false}).saved,false);
 console.log('PASS: margin transfer, preserved exposure/balance, decimal validation, insufficient funds, recovery and forced-close guards');
+
+const totalsCode=source.slice(source.indexOf('  function totals()'),source.indexOf('  function liquidationPrice'));
+for(const floating of [-500,0,5000]) {
+ const result=vm.runInNewContext(totalsCode+';totals()',{account:{balance:10000,positions:[{margin:1000}]},markToMarket:()=>floating});
+ assert.equal(result.free,9000);assert.equal(result.equity,10000+floating);
+}
+console.log('PASS: floating P/L changes equity but cannot fund additional isolated margin');

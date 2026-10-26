@@ -16,5 +16,9 @@ assert.equal((await call('/?__served=1',{headers:{cookie:'fxk_route=main'}})).st
 assert.equal((await call('/api/account',{headers:{cookie:'fxk_route=main'}})).status,503);
 globalThis.fetch=async()=>new Response('<!DOCTYPE html><title>challenge</title>');
 assert.equal((await call('/?__served=1',{headers:{cookie:'fxk_route=main'}})).status,303);
+globalThis.fetch=async req=>{sent=req;return new Response('{"revision":4}',{headers:{'content-type':'application/json'}});};
+const cross=await call('/api/account',{headers:{origin:'https://chai-maomao.github.io','x-fxk-visitor-id':'12345678-1234-4234-8234-123456789abc'}});assert.equal(cross.status,200);assert.equal(cross.headers.get('access-control-allow-origin'),'https://chai-maomao.github.io');assert.equal(sent.headers.get('origin'),'https://chai-maomao.github.io');
+const corsPreflight=await call('/api/account',{method:'OPTIONS',headers:{origin:'https://chai-maomao.github.io','access-control-request-headers':'content-type,x-fxk-visitor-id'}});assert.equal(corsPreflight.status,204);
+assert.equal((await call('/api/account',{headers:{origin:'https://evil.test','x-fxk-visitor-id':'anything'}})).status,403);
 globalThis.fetch=original;
 console.log('PASS: visitor health probe, branch cookie, shared account across both frontend routes, main cookie and origin proxy, leaderboard identity, HTML/error fallback');

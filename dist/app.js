@@ -7,7 +7,9 @@
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
   const START = 100000, KEY = 'fx-kantan-paper-v1';
   const GITHUB_MIRROR = location.hostname.toLowerCase() === 'chai-maomao.github.io';
-  const LEADERBOARD_API = GITHUB_MIRROR ? 'https://fx-kantan.top/api/leaderboard' : '/api/leaderboard';
+  const SERVER_ACCOUNTS = true;
+  const API_ORIGIN = GITHUB_MIRROR ? 'https://fx-kantan-gateway.cardex-online.workers.dev' : '';
+  const LEADERBOARD_API = `${API_ORIGIN}/api/leaderboard`;
   const MIRROR_ID_KEY = 'fx-kantan-board-id-v1';
   const CURRENCY_NAMES = {USD:'美元',EUR:'欧元',GBP:'英镑',JPY:'日元',AUD:'澳元',NZD:'新西兰元',CHF:'瑞士法郎',CAD:'加元'};
   const $ = id => document.getElementById(id);
@@ -48,7 +50,7 @@
     let lastError;
     for(let attempt=0;attempt<2;attempt++) {
       try {
-        const response=await fetch(`/api/account${path}`,{...options,credentials:'same-origin',signal:AbortSignal.timeout(20000)});
+        const response=await fetch(`${API_ORIGIN}/api/account${path}`,{...options,headers:mirrorHeaders(options.headers),credentials:GITHUB_MIRROR?'omit':'same-origin',signal:AbortSignal.timeout(20000)});
         const text=await response.text();let data;
         try {data=JSON.parse(text);}catch {
           const hint=response.status===403?'请求被访问保护拦截':response.status===429?'请求过于频繁':response.status>=500?'服务暂时不可用或回查超时':'返回了网页而非账户数据';
@@ -66,7 +68,7 @@
     throw lastError;
   }
   async function syncAccount() {
-    if(GITHUB_MIRROR||!accountReady||recovering||syncBusy||!syncDirty)return;
+    if(!SERVER_ACCOUNTS||!accountReady||recovering||syncBusy||!syncDirty)return;
     syncBusy=true;syncDirty=false;recoveryStatus('正在保存到服务器…');
     try {
       const data=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
@@ -80,10 +82,10 @@
   async function recoverAccount(initial=false) {
     if(recovering)return;
     if(syncBusy)return;
-    if(!GITHUB_MIRROR&&accountReady&&syncDirty){await syncAccount();if(!accountReady)return;}
+    if(SERVER_ACCOUNTS&&accountReady&&syncDirty){await syncAccount();if(!accountReady)return;}
     recovering=true;accountReady=false;recoveryStatus('正在恢复持仓并回查离线行情…');render();
     try {
-      if(!GITHUB_MIRROR) {
+      if(SERVER_ACCOUNTS) {
         const saved=await accountRequest();
         serverRevision=saved.revision;
         if(saved.account && !initial) {
@@ -115,27 +117,30 @@
         const result=await FXRecovery.recover(account,{latest:quotes});
         recoveryStatus(result.notices.length?result.notices.join('；'):'镜像站：本地存档，离线行情已核对');
       }
-      localStorage.setItem(KEY,JSON.stringify(account));if(!GITHUB_MIRROR){localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','false');}$('leverage').value=String(account.leverage);accountReady=true;
+      localStorage.setItem(KEY,JSON.stringify(account));if(SERVER_ACCOUNTS){localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','false');}$('leverage').value=String(account.leverage);accountReady=true;
     }catch(error){recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);}
     finally{recovering=false;render();}
   }
 
-  function leaderboardFetch(path = '', options = {}) {
-    if (!GITHUB_MIRROR) return fetch(`${LEADERBOARD_API}${path}`,{...options,credentials:'same-origin'});
-    if (!mirrorVisitorId) {
-      try { mirrorVisitorId = localStorage.getItem(MIRROR_ID_KEY); } catch {}
-      if (!mirrorVisitorId || !/^[0-9a-f-]{36}$/.test(mirrorVisitorId)) {
-        mirrorVisitorId = crypto.randomUUID();
-        try { localStorage.setItem(MIRROR_ID_KEY,mirrorVisitorId); } catch {}
+  function mirrorHeaders(existing) {
+    const headers=new Headers(existing);
+    if(!GITHUB_MIRROR)return headers;
+    if(!mirrorVisitorId) {
+      try{mirrorVisitorId=localStorage.getItem(MIRROR_ID_KEY);}catch{}
+      if(!mirrorVisitorId||!/^[0-9a-f-]{36}$/.test(mirrorVisitorId)) {
+        mirrorVisitorId=crypto.randomUUID();
+        try{localStorage.setItem(MIRROR_ID_KEY,mirrorVisitorId);}catch{}
       }
     }
-    const headers = new Headers(options.headers);
     headers.set('X-FXK-Visitor-ID',mirrorVisitorId);
-    return fetch(`${LEADERBOARD_API}${path}`,{...options,headers,credentials:'omit'});
+    return headers;
+  }
+  function leaderboardFetch(path='',options={}) {
+    return fetch(`${LEADERBOARD_API}${path}`,{...options,headers:mirrorHeaders(options.headers),credentials:GITHUB_MIRROR?'omit':'same-origin'});
   }
   function save() {
     try {localStorage.setItem(KEY,JSON.stringify(account));}catch{}
-    if(!GITHUB_MIRROR&&accountReady){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}
+    if(SERVER_ACCOUNTS&&accountReady){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}
   }
   function currentQuote(symbol) {
     const q = quotes[symbol];
@@ -166,7 +171,7 @@
     const floating = values.reduce((sum,v) => sum + (v || 0),0);
     const margin = account.positions.reduce((sum,p) => sum + p.margin,0);
     const equity = account.balance + floating;
-    return {floating,margin,equity,free:equity-margin,complete};
+    return {floating,margin,equity,free:account.balance-margin,complete};
   }
   function liquidationPrice(p) {
     const q=currentQuote(p.symbol),factor=quoteToUsd(p.symbol.slice(3),true);
@@ -223,7 +228,7 @@
   function renderAccount() {
     const t = totals();
     $('equity').textContent = t.complete ? money(t.equity) : '—';
-    $('free-margin').textContent = t.complete ? money(t.free) : '—';
+    $('free-margin').textContent = money(t.free);
     $('floating').textContent = t.complete ? money(t.floating) : '—';
     $('floating').className = positiveClass(t.floating);
     $('realized').textContent = money(account.balance-account.startingBalance);
@@ -301,7 +306,7 @@
   }
   function trade(side) {
     const q = currentQuote(selected), budget = marginBudget();
-    if (!accountReady||recovering||(!GITHUB_MIRROR&&(syncBusy||syncDirty)))return showMessage('正在恢复或保存账户，请稍候。','error');
+    if (!accountReady||recovering||(syncBusy||syncDirty))return showMessage('正在恢复或保存账户，请稍候。','error');
     if(account.positions.length>=100)return showMessage('最多同时持有 100 个仓位。','error');
     if (!canTrade(selected)) return showMessage('当前报价不可交易，请等待最新行情。','error');
     if (!validMargin(budget)) return showMessage('请输入 1 至 1,000,000,000 美元的保证金，最多两位小数。','error');
@@ -398,7 +403,7 @@
     } catch(error) {
       $('leaderboard-publish').disabled=true;
       $('leaderboard-remove').disabled=true;
-      setLeaderboardStatus(GITHUB_MIRROR?'抱歉，镜像站暂时无法连接主站排行榜。请稍后点击“刷新”重试；模拟交易和行情仍可使用。':error.message||'排行榜暂不可用，请稍后刷新。','error');
+      setLeaderboardStatus(GITHUB_MIRROR?'抱歉，Cloudflare 转发暂时无法连接排行榜，请稍后刷新；交易存档连接状态见持仓区。':error.message||'排行榜暂不可用，请稍后刷新。','error');
     }
   }
   async function publishLeaderboard(event) {
@@ -682,10 +687,10 @@
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!accountReady||recovering)return;if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){recoverAccount();refreshQuotes();refreshChart();}});
-  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' 镜像的榜单仍由主站提供；如果该服务无法连接，榜单会暂时不可用。');
+  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' 镜像经 Cloudflare 连接原站存档和榜单；首次使用会保存本机旧账户。不同域名的匿名账户不会自动合并。');
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
   $('account-retry').addEventListener('click',async()=>{
-    if(syncDirty&&!GITHUB_MIRROR){accountReady=true;await syncAccount();}
+    if(syncDirty&&SERVER_ACCOUNTS){accountReady=true;await syncAccount();}
     else await recoverAccount(true);
   });
   render();adjustChartSelection('range');

@@ -3,7 +3,7 @@ const html=main=>`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta 
 (async()=>{let target='cloud';try{const r=await fetch(${JSON.stringify(main+'/api/health')},{mode:'cors',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(3500)});const data=await r.json();if(r.ok&&data.ok===true&&data.service==='fx-kantan-main')target='main';}catch{}document.getElementById('status').textContent=target==='main'?'主站连接正常，正在进入…':'主站连接不可用，正在进入副站…';location.replace('/__fxk/route?target='+target+location.hash);})();
 </script></html>`;
 const responseJSON=(value,status)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
-export default {
+const gateway = {
  async fetch(request,env) {
   const url=new URL(request.url),main=new URL(env.MAIN_ORIGIN);
   if(main.origin===url.origin)return responseJSON({error:'分流目标配置错误。'},503);
@@ -28,7 +28,7 @@ export default {
   // The public host remains unchanged, so its existing anonymous account cookie
   // keeps identifying the same main-site account through the reverse proxy.
   if(headers.has('origin'))headers.set('origin',main.origin);
-  if(url.pathname.startsWith('/api/leaderboard')&&headers.has('x-fxk-visitor-id'))headers.set('origin','https://chai-maomao.github.io');
+  if(url.pathname.startsWith('/api/')&&headers.has('x-fxk-visitor-id'))headers.set('origin','https://chai-maomao.github.io');
   try {
    const result=await fetch(new Request(upstream,{method:request.method,headers,body:['GET','HEAD'].includes(request.method)?undefined:request.body,redirect:'manual',signal:AbortSignal.timeout(15000)}));
    if(url.pathname.startsWith('/api/')) {
@@ -47,5 +47,18 @@ export default {
    if(url.pathname==='/'&&request.method==='GET')return new Response(null,{status:303,headers:{location:'/__fxk/route?target=cloud','cache-control':'no-store'}});
    return responseJSON({error:'主站连接暂不可用，请稍后重试。'},503);
   }
+ }
+};
+
+export default {
+ async fetch(request,env) {
+  const origin=request.headers.get('origin'),url=new URL(request.url),mirror=origin==='https://chai-maomao.github.io';
+  if(origin&&origin!==url.origin&&!mirror)return responseJSON({error:'跨站请求被拒绝。'},403);
+  if(mirror&&request.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, POST, DELETE, OPTIONS','access-control-allow-headers':'Content-Type, X-FXK-Visitor-ID','access-control-max-age':'600','vary':'Origin'}});
+  if(mirror&&url.pathname.startsWith('/api/')&&!request.headers.get('x-fxk-visitor-id'))return new Response(JSON.stringify({error:'缺少浏览器身份。'}),{status:400,headers:{'content-type':'application/json','access-control-allow-origin':origin,'vary':'Origin'}});
+  const response=await gateway.fetch(request,env);
+  if(!mirror)return response;
+  const headers=new Headers(response.headers);headers.set('access-control-allow-origin',origin);headers.set('vary','Origin');headers.delete('set-cookie');
+  return new Response(response.body,{status:response.status,headers});
  }
 };

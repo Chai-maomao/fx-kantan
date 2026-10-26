@@ -5,7 +5,7 @@ const app=readFileSync('dist/app.js','utf8');
 const fn=app.slice(app.indexOf('  async function accountRequest('),app.indexOf('  async function syncAccount'));
 async function request(responses,options={}) {
  let calls=0;const bodies=[];
- const ctx={AbortSignal,fetch:async(url,args)=>{bodies.push(args.body);return responses[Math.min(calls++,responses.length-1)]();}};
+ const ctx={AbortSignal,API_ORIGIN:'',GITHUB_MIRROR:false,mirrorHeaders:()=>({}),fetch:async(url,args)=>{bodies.push(args.body);return responses[Math.min(calls++,responses.length-1)]();}};
  try{return {data:await vm.runInNewContext(fn+`;accountRequest('',${JSON.stringify(options)})`,ctx),calls,bodies};}
  catch(error){return {error,calls,bodies};}
 }
@@ -25,7 +25,7 @@ await assert.rejects(feed.bars('EURUSD','1m',0,10000),/时间预算/);assert.equ
 // A failed post-liquidation upload must keep the balance/history in local backup.
 const sync=app.slice(app.indexOf('  async function syncAccount'),app.indexOf('  async function recoverAccount'));
 const writes=new Map(),account={balance:99000,positions:[],history:[{action:'强制平仓',pnl:-1000}]};let status='';
-const context={GITHUB_MIRROR:false,accountReady:true,recovering:false,syncBusy:false,syncDirty:true,serverRevision:1,account,accountRequest:async()=>{throw Error('账户接口服务暂时不可用（HTTP 504）。');},recoveryStatus:text=>status=text,localStorage:{setItem:(k,v)=>writes.set(k,v)},render(){},setTimeout(){}};
+const context={GITHUB_MIRROR:false,SERVER_ACCOUNTS:true,accountReady:true,recovering:false,syncBusy:false,syncDirty:true,serverRevision:1,account,accountRequest:async()=>{throw Error('账户接口服务暂时不可用（HTTP 504）。');},recoveryStatus:text=>status=text,localStorage:{setItem:(k,v)=>writes.set(k,v)},render(){},setTimeout(){}};
 vm.runInNewContext("localStorage.setItem('fx-kantan-paper-v1',JSON.stringify(account));",context);
 await vm.runInNewContext(sync+';syncAccount()',context);
 assert.equal(JSON.parse(writes.get('fx-kantan-paper-v1')).balance,99000);assert.equal(account.history.length,1);assert(context.syncDirty);assert(status.includes('本地备份保留'));

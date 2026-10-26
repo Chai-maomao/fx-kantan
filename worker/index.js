@@ -155,11 +155,13 @@ export default {
     const url = new URL(request.url);
     if(url.pathname==='/api/health'&&(request.method==='GET'||request.method==='OPTIONS'))return json({ok:true,service:'fx-kantan-main'},200,{'access-control-allow-origin':'*'});
     if(url.pathname==='/api/account'||url.pathname==='/api/account/recover') {
-      const origin=request.headers.get('origin');
-      if(origin&&origin!==url.origin)return json({error:'账户仅供主站访问。'},403);
-      if(!env.DB)return json({error:'服务器存档暂不可用。'},503);
-      const identity=browserIdentity(request);
-      try{return await accountEndpoint(env.DB,request,identity);}catch(error){console.error('account request failed',error);return json({error:'服务器存档暂不可用，请重试。'},503,headersFor(identity));}
+      const origin=request.headers.get('origin'),mirror=origin===MIRROR_ORIGIN;
+      if(origin&&origin!==url.origin&&!mirror)return json({error:'账户跨站请求被拒绝。'},403);
+      if(request.method==='OPTIONS'&&mirror)return new Response(null,{status:204,headers:{'access-control-allow-origin':MIRROR_ORIGIN,'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type, X-FXK-Visitor-ID','access-control-max-age':'600','vary':'Origin'}});
+      if(!env.DB)return mirrorResponse(json({error:'服务器存档暂不可用。'},503),mirror);
+      const identity=browserIdentity(request,mirror);
+      if(!identity.id)return mirrorResponse(json({error:'浏览器身份无效，请刷新后重试。'},400),mirror);
+      try{return mirrorResponse(await accountEndpoint(env.DB,request,identity),mirror);}catch(error){console.error('account request failed',error);return mirrorResponse(json({error:'服务器存档暂不可用，请重试。'},503,headersFor(identity)),mirror);}
     }
     if (url.pathname === '/api/leaderboard' || url.pathname.startsWith('/api/leaderboard/')) {
       const origin = request.headers.get('origin'), mirror = origin === MIRROR_ORIGIN;
