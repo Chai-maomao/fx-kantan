@@ -36,3 +36,10 @@
 离线回查：BiQuote 日/小时 → 5 分钟 → 1 分钟；最近逐笔历史若完整覆盖候选分钟，则还原实际报价触发。没有足够逐笔覆盖时按分钟 OHLC 估算，分钟内止盈和止损都触及时采用先止损的模拟约定，并标记估算。跨币种按对应历史换算汇率估算。历史不可用且当前已越强平线时，按强平线结算，扣除该仓保证金；当前未越线时保留持仓并提示历史不足。不会后台持续轮询所有离线玩家，而是在恢复请求时补算。旧版已结算交易没有完整仓位信息，不自动追溯改账。
 
 持仓支持追加美元保证金：从可用保证金划入，不增加货币数量、不修改开仓价和账户余额。强平价按累计保证金重算，有效杠杆随之下降；追加事件写入交易记录并同步主站存档。已触发强平的仓位不能事后追加。
+
+
+Cloudflare 入口：`https://fx-kantan-gateway.cardex-online.workers.dev`，配置 `cloudflare/wrangler.jsonc`，先运行 `node scripts/build-cloudflare.mjs` 再用 Wrangler deploy。访客浏览器在入口测试原生 Sites 域名 `/api/health`（3.5 秒上限，JSON 身份校验），主站可达时走主站网页代理，否则使用 Cloudflare 静态网页。保持入口域名不变，两种网页线路的 `/api/*` 都代理至原生 Sites 域名，匿名浏览器 Cookie 原样传递；账户存档始终只有原站一份，不创建第二套 Cloudflare 账户。主站 API 故障时停止交易并保留备份，不切换到另一份账本。GitHub 镜像现有本地账户规则不变。
+
+Cloudflare 当前仅部署 workers.dev 地址，fx-kantan.top 尚未接入 Cloudflare Zone，未修改其 DNS。正式切换主域名前需添加 zone、完整复制当前 DNS 记录并正确迁移 DNSSEC，然后绑定 Worker Custom Domain。不能直接把 apex CNAME 指向 workers.dev。主站原生域名固定为 fx-kantan-sim.ycn3258823137.chatgpt.site，防止域名切换后代理回自身。免费计划不升级收费，Worker 动态请求受 Cloudflare 免费额度限制。
+
+图表进入/恢复页面时以实际 select 值同步两套菜单；请求带 from/to 实时时间窗口，不用 K 线数量模拟日历跨度。返回数据若与请求货币对或周期不一致则不采用，过期异步请求不覆盖当前视图。

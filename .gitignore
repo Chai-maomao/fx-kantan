@@ -3,3 +3,5 @@ dist/server/
 dist/.openai/
 .sites-runtime/
 .wrangler/
+
+.cloudflare/

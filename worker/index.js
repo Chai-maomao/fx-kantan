@@ -153,6 +153,7 @@ async function accountEndpoint(db,request,identity) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if(url.pathname==='/api/health'&&(request.method==='GET'||request.method==='OPTIONS'))return json({ok:true,service:'fx-kantan-main'},200,{'access-control-allow-origin':'*'});
     if(url.pathname==='/api/account'||url.pathname==='/api/account/recover') {
       const origin=request.headers.get('origin');
       if(origin&&origin!==url.origin)return json({error:'账户仅供主站访问。'},403);

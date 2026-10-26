@@ -547,18 +547,22 @@
     drawHover();
   }
   async function refreshChart() {
-    const symbol=selected,{interval,count}=chartConfig(),request=++chartRequest;
+    const symbol=selected,{interval,range,count}=chartConfig(),request=++chartRequest;
+    syncChartPickers();
+    const to=Date.now(),from=to-RANGES[range]*60000;
     chartLastFetch=Date.now();
-    if (!chartBars.length) { $('chart-empty').style.display='grid'; $('chart-empty').textContent='正在读取行情图表…'; }
+    if (!chartBars.length) { $('chart-axis').innerHTML='';$('chart-hover').innerHTML='';$('chart-tooltip').hidden=true;$('chart-candles').innerHTML='';$('chart-line').setAttribute('d','');$('chart-fill').setAttribute('d','');$('chart-last').innerHTML='';$('chart-empty').style.display='grid'; $('chart-empty').textContent='正在读取行情图表…'; }
     try {
-      const response=await fetch(`https://biquote.io/api/${symbol}/ohlc?interval=${interval}&limit=${count}`,{cache:'no-store',signal:AbortSignal.timeout(12000)});
+      const response=await fetch(`https://biquote.io/api/${symbol}/ohlc?interval=${interval}&limit=${count}&from=${encodeURIComponent(new Date(from).toISOString())}&to=${encodeURIComponent(new Date(to).toISOString())}`,{cache:'no-store',signal:AbortSignal.timeout(12000)});
       if(!response.ok) throw Error(`HTTP ${response.status}`);
       const raw=await response.json();
-      if(request!==chartRequest) return;
-      chartBars=(Array.isArray(raw.bars)?raw.bars:[]).map(b=>({time:Date.parse(b.openTime),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close)})).filter(b=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(v=>Number.isFinite(v)&&v>0)).sort((a,b)=>a.time-b.time).slice(-count);
-      if(chartBars.length<2) throw Error('No chart data');
+      if(request!==chartRequest||symbol!==selected||interval!==$('chart-interval').value||range!==$('chart-range').value) return;
+      if(raw.interval&&raw.interval!==interval)throw Error('Chart period mismatch');
+      if(raw.symbol&&raw.symbol!==symbol)throw Error('Chart symbol mismatch');
+      chartBars=(Array.isArray(raw.bars)?raw.bars:[]).map(b=>({time:Date.parse(b.openTime),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close)})).filter(b=>Number.isFinite(b.time)&&b.time+PERIODS[interval]*60000>from&&b.time<=to&&[b.open,b.high,b.low,b.close].every(v=>Number.isFinite(v)&&v>0)).sort((a,b)=>a.time-b.time).slice(-count);
+      if(!chartBars.length) throw Error('No chart data');
       drawChart();
-    } catch { if(request===chartRequest && !chartBars.length) $('chart-empty').textContent='暂时无法读取图表，报价仍可单独使用。'; }
+    } catch { if(request===chartRequest && !chartBars.length) $('chart-empty').textContent='该跨度暂无可用图表数据，报价仍可单独使用。'; }
   }
   function updateCurrentBar(tick) {
     if(tick.symbol!==selected) return;
@@ -678,14 +682,15 @@
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!accountReady||recovering)return;if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){recoverAccount();refreshQuotes();refreshChart();}});
-  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' GitHub 镜像的榜单仍由 fx-kantan.top 提供；如果该服务无法连接，榜单会暂时不可用。');
+  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' 镜像的榜单仍由主站提供；如果该服务无法连接，榜单会暂时不可用。');
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
   $('account-retry').addEventListener('click',async()=>{
     if(syncDirty&&!GITHUB_MIRROR){accountReady=true;await syncAccount();}
     else await recoverAccount(true);
   });
-  render();refreshChart();
+  render();adjustChartSelection('range');
   (async()=>{await refreshQuotes();await recoverAccount(true);startStream();refreshLeaderboard();})();
+  window.addEventListener('pageshow',event=>{if(event.persisted)adjustChartSelection('range');});
   setInterval(()=>{if(!document.hidden&&!streamConnected)refreshQuotes();},3000);
   setInterval(()=>{if(!document.hidden&&streamConnected)refreshQuotes();},30000);
   setInterval(()=>{if(!document.hidden)refreshChart();},20000);

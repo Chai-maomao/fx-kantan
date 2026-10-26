@@ -25,3 +25,7 @@
 2026-10-16：每仓新增追加保证金弹窗，预览可用/累计保证金及强平价；提交复核并先处理风险触发。数量、开仓价、余额不变，占用保证金增加，有效杠杆列更新。追加记录含 marginAdded，服务端/本地 history 兼容；复用账户快照无需迁移。
 
 2026-10-22：爆仓时账户接口返回 HTML 的报错防护。客户端按状态处理非 JSON，有限重试；同版本同快照重发支持幂等确认，避免保存已成功但响应丢失后进入永久冲突。服务端回查总预算 8s、最新行情 3s，空仓直接返回，避免长回查拖成网关 HTML。现场网络主站 TLS 握手失败，不能据此确定用户的具体网关状态。
+
+2026-10-26：Cloudflare 分流入口部署 fx-kantan-gateway.cardex-online.workers.dev。gateway.mjs 浏览器探测原生主站 /api/health，main 网页代理/cloud 静态网页；两路交易 API、匿名 Cookie、localStorage key 一致，都用原站 D1。明确禁止副站独立交易账本。fx-kantan.top 未接入该 Cloudflare 账户，未改 DNS/NS；域名切换仍需 zone 和 Custom Domain，迁移时保留账号 Cookie/原站数据并协调 DNSSEC。安装 Wrangler 位于忽略的 .cloudflare/tools，现 OAuth 可部署 Worker，但没有 zone 可直接绑定。图表启动用 adjustChartSelection('range') 同步浏览器恢复值，from/to 时间过滤、拒绝币种/周期错配及过期请求；tests/chart.test.mjs、gateway.test.mjs 和全部账务回归通过。
+
+Cloudflare 添加 zone 的实际 API 返回 403，缺少 com.cloudflare.api.account.zone.create 权限；未创建 zone、未改注册商 NS。后续需用户在 Cloudflare 后台添加 fx-kantan.top（Free）并授权/完成 DNS 接入，然后绑定现有 Worker。临时 workers.dev 与 fx-kantan.top 不同域名，浏览器 Cookie 自然不同，不能把临时网址视作旧账户入口。
