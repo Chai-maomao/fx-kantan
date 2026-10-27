@@ -4,6 +4,6 @@
   "main": "gateway.mjs",
   "compatibility_date": "2026-10-26",
   "workers_dev": true,
-  "assets": {"directory": "../.cloudflare/assets", "binding": "ASSETS", "run_worker_first": true},
+  "assets": {"directory": "../.cloudflare/assets", "binding": "ASSETS", "run_worker_first": ["/api/*"]},
   "vars": {"MAIN_ORIGIN": "https://fx-kantan-sim.ycn3258823137.chatgpt.site"}
 }
