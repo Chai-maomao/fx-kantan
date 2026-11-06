@@ -7,7 +7,7 @@
   <meta name="description" content="FX kantan! 是一个使用实时外汇行情的免费虚拟交易游戏。">
   <title>FX kantan! · 外汇模拟交易</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%230b1630'/%3E%3Cpath d='M12 42l12-11 9 7 18-19' fill='none' stroke='%2351ebc4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='19' r='5' fill='%23ff718b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css?v=6">
+  <link rel="stylesheet" href="./style.css?v=7">
 </head>
 <body>
   <div class="app-shell">
@@ -54,14 +54,13 @@
           <p class="stop-note">单笔亏损达到该仓保证金时强平。汇率变化会影响参考价，跳价时亏损可能超过保证金。重新打开页面会补查离线行情。缺少历史报价且已越过强平价时，按参考价估算。</p>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
-          <p class="trade-hint">按实时买卖价模拟成交，盈亏折算为美元。休市或报价过期时暂停交易。</p>
         </aside>
       </div>
 
       <section class="records panel">
         <div class="section-head"><div><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
         <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>投入保证金 USD</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>止盈 / 止损</th><th>浮动盈亏 USD</th><th>参考强平价</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
-        <p class="storage-status"><span id="account-storage-status" role="status">正在恢复账户…</span> <button id="account-retry" type="button" class="text-button">重试存档 / 回查</button></p><div class="history-head"><h3>交易记录</h3><span>交易存档保存在服务器 · 本机保留备份</span></div>
+        <p class="storage-status"><span id="account-storage-status" role="status">正在恢复账户…</span> <button id="account-retry" type="button" class="text-button">重试存档 / 回查</button></p><div class="history-head"><h3>交易记录</h3></div>
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
       <section class="leaderboard panel" aria-labelledby="leaderboard-title">
@@ -70,7 +69,6 @@
         <form id="leaderboard-form" class="leaderboard-form"><label for="leaderboard-name">展示名</label><input id="leaderboard-name" type="text" maxlength="24" autocomplete="nickname" required><button id="leaderboard-publish" type="submit" disabled>发布我的盈亏</button><button id="leaderboard-remove" class="leaderboard-remove" type="button" hidden>撤下我的记录</button></form>
         <p id="leaderboard-status" class="leaderboard-status" role="status">正在读取排行榜…</p>
         <div id="leaderboard-list" class="leaderboard-list"></div>
-        <p class="leaderboard-note">榜单显示上次发布的数据，重新发布会覆盖旧记录。本站不验证身份或成绩。清除 Cookie 后将无法撤下原记录。</p>
       </section>
       <dialog id="margin-add-dialog" class="risk-dialog"><form id="margin-add-form"><h2>追加保证金</h2><p id="margin-add-pair"></p><p>当前保证金 <strong id="margin-add-current">—</strong> · 可用 <strong id="margin-add-free">—</strong></p><label for="margin-add-amount">追加金额（USD）<input id="margin-add-amount" type="number" min="1" max="1000000000" step="0.01" value="100" inputmode="decimal" required></label><p>追加后保证金 <strong id="margin-add-total">—</strong><br>参考强平价 <strong id="margin-add-price">—</strong></p><p id="margin-add-message" role="status"></p><div class="risk-actions"><button type="button" id="margin-add-cancel">取消</button><button type="submit" id="margin-add-submit">确认追加</button></div></form></dialog>
       <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
@@ -86,7 +84,6 @@
         </div>
         <p class="video-note">视频来自作品的 YouTube 官方频道。</p>
       </section>
-      <footer>本站是非官方模拟交易项目。主视觉由用户提供。</footer>
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>

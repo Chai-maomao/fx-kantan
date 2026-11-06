@@ -55,7 +55,7 @@ body { background: #071124; }
 .chart-heading h2 { margin: 0; letter-spacing: 0; }
 .chart-toolbar { margin-top: 12px; }
 .trade-symbol { margin-top: 12px; }
-.bidask div { background: transparent; border: 0; padding: 4px 0; }
+.bidask div { background: transparent; border: 0; padding: 4px 0 4px 10px; }
 .liquidation-preview { background: transparent; border: 0; border-top: 1px solid #38516a; border-radius: 0; padding: 10px 0 0; }
 .leaderboard-entry, .leaderboard-history-row { background: transparent; border: 0; border-bottom: 1px solid #29455b; border-radius: 0; }
 .leaderboard-list { gap: 0; }
