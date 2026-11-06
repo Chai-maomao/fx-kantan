@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b1630">
+  <meta name="theme-color" content="#071124">
   <meta name="description" content="FX kantan! 是一个使用实时外汇行情的免费虚拟交易游戏。">
   <title>FX kantan! · 外汇模拟交易</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%230b1630'/%3E%3Cpath d='M12 42l12-11 9 7 18-19' fill='none' stroke='%2351ebc4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='19' r='5' fill='%23ff718b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css?v=5">
+  <link rel="stylesheet" href="./style.css?v=6">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">↗</span><span>FX <b>kantan!</b></span><span class="brand-tag">SIMULATION</span></div>
-      <div class="top-actions"><span id="feed-status" class="status status-wait">连接行情中</span><span class="top-note">仅供娱乐 · 虚拟资金</span></div>
+      <div class="brand"><span>FX <b>kantan!</b></span></div>
+      <div class="top-actions"><span id="feed-status" class="status status-wait">连接行情中</span><span class="top-note">模拟交易 · 虚拟资金</span></div>
     </header>
 
     <main>
@@ -26,19 +26,19 @@
 
       <div class="workspace">
         <section class="watchlist panel" aria-label="货币对列表">
-          <div class="section-head"><div><span class="eyebrow">WATCHLIST / 自选</span><h2>货币对</h2></div><span class="watch-count">14</span></div>
+          <div class="section-head"><div><h2>货币对</h2></div></div>
           <div class="watch-filter" role="group" aria-label="筛选货币对"><button type="button" class="active" data-filter="all">全部</button><button type="button" data-filter="jpy">日元</button><button type="button" data-filter="major">主流</button></div>
           <div id="pair-list" class="pair-list" role="tablist" aria-label="选择货币对"></div>
         </section>
         <section class="market panel">
-          <div class="chart-heading"><div><span class="eyebrow">MARKET / 实时行情</span><h2 id="chart-title">EUR/USD</h2></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
+          <div class="chart-heading"><div><h2 id="chart-title">EUR/USD</h2></div><div class="chart-right"><span id="pair-price">—</span><small id="pair-change">—</small></div></div>
           <div class="chart-toolbar"><div class="segmented" role="group" aria-label="图表类型"><button type="button" class="active" data-mode="candles" aria-pressed="true">K 线</button><button type="button" data-mode="line" aria-pressed="false">分时</button></div><div class="interval-field"><span id="chart-interval-caption">周期</span><div class="interval-picker"><select id="chart-interval" hidden aria-hidden="true" tabindex="-1"><option value="1m">1 分</option><option value="5m" selected>5 分</option><option value="15m">15 分</option><option value="1h">1 小时</option><option value="4h">4 小时</option><option value="1d">1 天</option></select><button id="chart-interval-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="chart-interval-caption chart-interval-label"><span id="chart-interval-label">5 分</span><span aria-hidden="true">⌄</span></button><div id="chart-interval-menu" class="interval-menu" role="listbox" aria-label="K 线周期" hidden><button type="button" role="option" data-interval="1m">1 分</button><button type="button" role="option" data-interval="5m" aria-selected="true">5 分</button><button type="button" role="option" data-interval="15m">15 分</button><button type="button" role="option" data-interval="1h">1 小时</button><button type="button" role="option" data-interval="4h">4 小时</button><button type="button" role="option" data-interval="1d">1 天</button></div></div></div><div class="interval-field"><span id="chart-range-caption">跨度</span><div class="interval-picker" id="range-picker"><select id="chart-range" hidden aria-hidden="true" tabindex="-1"><option value="1h">1 小时</option><option value="2h">2 小时</option><option value="8h">8 小时</option><option value="1d" selected>1 天</option><option value="1w">1 周</option><option value="1mo">1 个月</option><option value="3mo">3 个月</option></select><button id="chart-range-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="chart-range-caption chart-range-label"><span id="chart-range-label">1 天</span><span aria-hidden="true">⌄</span></button><div id="chart-range-menu" class="interval-menu" role="listbox" aria-label="图表跨度" hidden><button type="button" role="option" data-range="1h" aria-selected="false">1 小时</button><button type="button" role="option" data-range="2h" aria-selected="false">2 小时</button><button type="button" role="option" data-range="8h" aria-selected="false">8 小时</button><button type="button" role="option" data-range="1d" aria-selected="true">1 天</button><button type="button" role="option" data-range="1w" aria-selected="false">1 周</button><button type="button" role="option" data-range="1mo" aria-selected="false">1 个月</button><button type="button" role="option" data-range="3mo" aria-selected="false">3 个月</button></div></div></div><button id="chart-reset" class="chart-reset" type="button" title="恢复完整视图">重置视图</button></div>
           <div class="chart-wrap" id="chart-wrap"><svg id="chart" viewBox="0 0 800 360" preserveAspectRatio="none" role="img" aria-label="汇率图表"><g id="chart-grid"></g><path id="chart-fill"></path><path id="chart-line"></path><g id="chart-candles"></g><g id="chart-axis"></g><g id="chart-last"></g><g id="chart-hover"></g></svg><div id="chart-empty" class="chart-empty">正在读取行情图表…</div><div id="chart-tooltip" class="chart-tooltip" hidden></div></div>
           <div class="chart-foot"><span id="chart-detail">5 分钟周期 · 近 1 天</span><span id="updated-at">等待最新报价</span><span>数据：<a href="https://biquote.io/" target="_blank" rel="noopener noreferrer">BiQuote</a></span></div><p class="chart-help">鼠标悬停查看往时数据 · 滚轮缩放 · 按住拖动浏览历史</p>
         </section>
 
         <aside class="trade panel">
-          <div class="section-head"><div><span class="eyebrow">ORDER / 下单</span><h2>模拟交易</h2></div><span class="pill">虚拟</span></div>
+          <div class="section-head"><div><h2>下单</h2></div></div>
           <div class="trade-symbol"><span id="trade-pair">EUR/USD</span><small id="trade-state">等待报价</small></div>
           <div class="bidask"><div><span>卖出 BID</span><strong id="bid">—</strong></div><div><span>买入 ASK</span><strong id="ask">—</strong></div></div>
           <label class="field-label" for="order-margin">投入保证金 <span>美元（USD）</span></label>
@@ -46,48 +46,47 @@
           <div class="quick-units"><button type="button" data-margin="100">$100</button><button type="button" data-margin="1000">$1,000</button><button type="button" data-margin="10000">$10,000</button></div>
           <label class="field-label" for="leverage">杠杆倍数 <span>保证金 × 杠杆 = 仓位金额</span></label>
           <select id="leverage" class="trade-select"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20" selected>20×</option><option value="50">50×</option><option value="100">100×</option><option value="200">200×</option><option value="300">300×</option><option value="500">500×</option></select>
-          <p id="units-explain" class="units-explain">输入美元保证金并选择杠杆，行情接通后显示可交易的货币数量。</p>
+          <p id="units-explain" class="units-explain">等待报价后计算交易数量。</p>
           <div class="stop-fields"><label for="take-profit">止盈价 <input id="take-profit" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止盈"></label><label for="stop-loss">止损价 <input id="stop-loss" class="reference-value" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="当前价是参考值，调节或输入后才会设置止损"></label></div>
-          <p class="stop-note">淡色当前价仅作参考，点数字框的小箭头或输入后才会设置；留空则不设置。做多止盈须高于开仓价，止损须低于当前卖出价；做空相反。在线按收到的行情触发，离线区间在恢复时回查。</p>
+          <p class="stop-note">输入或微调价格即可设置，留空不设。做多止盈须高于开仓价，止损须低于当前卖出价。做空相反。</p>
           <div class="order-summary"><span>预计仓位金额 USD</span><strong id="estimated-margin">—</strong></div>
           <div class="liquidation-preview"><span>参考强平价</span><div><span>做多（BID） <strong id="liquidation-buy">—</strong></span><span>做空（ASK） <strong id="liquidation-sell">—</strong></span></div></div>
-          <p class="stop-note">单仓亏损达到该仓占用保证金时强平，账户其他资金不补仓。参考价随美元换算汇率变化；跳价可能使亏损超过保证金。在线时按有效报价监控；重新打开时回查离线行情，历史不足且当前越线时按强平价估算。</p>
+          <p class="stop-note">单笔亏损达到该仓保证金时强平。汇率变化会影响参考价，跳价时亏损可能超过保证金。重新打开页面会补查离线行情。缺少历史报价且已越过强平价时，按参考价估算。</p>
           <div class="order-actions"><button id="sell-button" class="sell-button" type="button" disabled>卖出 · 做空</button><button id="buy-button" class="buy-button" type="button" disabled>买入 · 做多</button></div>
           <p id="trade-message" class="trade-message" role="status">行情接通后即可开始。</p>
-          <p class="trade-hint">按实时买卖价模拟成交。账户以美元计价；外币盈亏会按最新汇率换算。休市或报价过期时暂停交易。</p>
+          <p class="trade-hint">按实时买卖价模拟成交，盈亏折算为美元。休市或报价过期时暂停交易。</p>
         </aside>
       </div>
 
       <section class="records panel">
-        <div class="section-head"><div><span class="eyebrow">PORTFOLIO / 战绩</span><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
+        <div class="section-head"><div><h2>我的持仓</h2></div><button id="reset-button" class="text-button" type="button">重置模拟账户</button></div>
         <div class="table-scroll"><table><thead><tr><th>货币对</th><th>方向</th><th>投入保证金 USD</th><th>杠杆</th><th>开仓价</th><th>当前平仓价</th><th>止盈 / 止损</th><th>浮动盈亏 USD</th><th>参考强平价</th><th>操作</th></tr></thead><tbody id="positions-body"></tbody></table></div>
         <p class="storage-status"><span id="account-storage-status" role="status">正在恢复账户…</span> <button id="account-retry" type="button" class="text-button">重试存档 / 回查</button></p><div class="history-head"><h3>交易记录</h3><span>交易存档保存在服务器 · 本机保留备份</span></div>
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>货币对</th><th>操作</th><th>数量</th><th>价格</th><th>已实现盈亏</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
       <section class="leaderboard panel" aria-labelledby="leaderboard-title">
-        <div class="section-head"><div><span class="eyebrow">LEADERBOARD / 盈亏榜</span><h2 id="leaderboard-title">模拟盈亏排行榜</h2></div><button id="leaderboard-refresh" class="text-button" type="button">刷新</button></div>
-        <p class="leaderboard-intro">按账户总盈亏（已实现＋未实现）排序。点击玩家可查看其最近 20 条交易记录。发布需自愿填写名字，更新后覆盖此浏览器原有记录。</p>
-        <form id="leaderboard-form" class="leaderboard-form"><label for="leaderboard-name">展示名</label><input id="leaderboard-name" type="text" maxlength="24" autocomplete="nickname" placeholder="输入你希望展示的名字" required><button id="leaderboard-publish" type="submit" disabled>发布我的盈亏</button><button id="leaderboard-remove" class="leaderboard-remove" type="button" hidden>撤下我的记录</button></form>
+        <div class="section-head"><div><h2 id="leaderboard-title">模拟盈亏排行榜</h2></div><button id="leaderboard-refresh" class="text-button" type="button">刷新</button></div>
+        <p class="leaderboard-intro">按总盈亏排名，含浮动盈亏。点开名字可看最近 20 条交易。</p>
+        <form id="leaderboard-form" class="leaderboard-form"><label for="leaderboard-name">展示名</label><input id="leaderboard-name" type="text" maxlength="24" autocomplete="nickname" required><button id="leaderboard-publish" type="submit" disabled>发布我的盈亏</button><button id="leaderboard-remove" class="leaderboard-remove" type="button" hidden>撤下我的记录</button></form>
         <p id="leaderboard-status" class="leaderboard-status" role="status">正在读取排行榜…</p>
         <div id="leaderboard-list" class="leaderboard-list"></div>
-        <p class="leaderboard-note">榜单和交易记录是最近一次自愿发布的快照，不会随本地交易自动更新；没有实名或反作弊验证。清除本站 Cookie 后会被视作新浏览器，旧记录将无法自行认领或撤下。</p>
+        <p class="leaderboard-note">榜单显示上次发布的数据，重新发布会覆盖旧记录。本站不验证身份或成绩。清除 Cookie 后将无法撤下原记录。</p>
       </section>
       <dialog id="margin-add-dialog" class="risk-dialog"><form id="margin-add-form"><h2>追加保证金</h2><p id="margin-add-pair"></p><p>当前保证金 <strong id="margin-add-current">—</strong> · 可用 <strong id="margin-add-free">—</strong></p><label for="margin-add-amount">追加金额（USD）<input id="margin-add-amount" type="number" min="1" max="1000000000" step="0.01" value="100" inputmode="decimal" required></label><p>追加后保证金 <strong id="margin-add-total">—</strong><br>参考强平价 <strong id="margin-add-price">—</strong></p><p id="margin-add-message" role="status"></p><div class="risk-actions"><button type="button" id="margin-add-cancel">取消</button><button type="submit" id="margin-add-submit">确认追加</button></div></form></dialog>
       <dialog id="risk-dialog" class="risk-dialog"><form id="risk-form"><h2>设置止盈止损</h2><p id="risk-pair"></p><label for="risk-tp">止盈价<input id="risk-tp" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><label for="risk-sl">止损价<input id="risk-sl" type="number" min="0.00001" step="0.00001" inputmode="decimal" title="点小箭头或输入价格；留空不设置"></label><p id="risk-message" role="status"></p><div class="risk-actions"><button type="button" id="risk-cancel">取消</button><button type="submit">保存</button></div></form></dialog>
       <section class="welcome panel">
-        <div class="welcome-copy"><span class="eyebrow">你的外汇练习场</span><h1>看准时机，<br><em>试试这一单。</em></h1><p>从 100,000 美元虚拟资金开始。观察行情，再决定买入还是卖出。</p><a class="inspiration-link" href="#inspiration">看看灵感作品的官方画面 ↘</a></div>
+        <div class="welcome-copy"><h2>关于 FX kantan!</h2><p>新账户有 100,000 美元虚拟资金。这个小站的灵感来自《FX战士久留美》。</p></div>
         <div class="hero-art"><img src="./assets/kurumi-hero.png" alt="《FX战士久留美》角色主视觉插画"></div>
       </section>
       <section id="inspiration" class="inspiration panel" aria-labelledby="inspiration-title">
-        <div class="section-head"><div><span class="eyebrow">INSPIRATION / 灵感来源</span><h2 id="inspiration-title">《FX战士久留美》官方影像</h2></div><a class="official-link" href="https://fxkurumi-info.com/movie/" target="_blank" rel="noopener noreferrer">作品官网 ↗</a></div>
-        <p class="inspiration-intro">可爱的角色遇上紧张的汇率曲线，正是这个模拟交易小站的灵感。以下视频由官方频道提供。</p>
+        <div class="section-head"><div><h2 id="inspiration-title">《FX战士久留美》官方影像</h2></div><a class="official-link" href="https://fxkurumi-info.com/movie/" target="_blank" rel="noopener noreferrer">作品官网</a></div>
         <div class="video-grid">
-          <article class="video-card"><a class="video-frame" href="https://www.youtube.com/watch?v=YcDX0ndqzqw" target="_blank" rel="noopener noreferrer" aria-label="观看《FX战士久留美》官方主预告"><img src="https://img.youtube.com/vi/YcDX0ndqzqw/maxresdefault.jpg" alt="《FX战士久留美》主预告的官方封面画面" loading="lazy"><span class="play-glyph" aria-hidden="true">▶</span></a><div class="video-caption"><strong>主预告</strong><span>更多角色与动画场景</span></div></article>
-          <article class="video-card"><a class="video-frame" href="https://www.youtube.com/watch?v=rZwpVLm00bs" target="_blank" rel="noopener noreferrer" aria-label="观看《FX战士久留美》官方视觉预告"><img src="https://img.youtube.com/vi/rZwpVLm00bs/maxresdefault.jpg" alt="《FX战士久留美》视觉预告的官方封面画面" loading="lazy"><span class="play-glyph" aria-hidden="true">▶</span></a><div class="video-caption"><strong>视觉预告</strong><span>官方公开的角色与海报画面</span></div></article>
+          <article class="video-card"><a class="video-frame" href="https://www.youtube.com/watch?v=YcDX0ndqzqw" target="_blank" rel="noopener noreferrer" aria-label="观看《FX战士久留美》官方主预告"><img src="https://img.youtube.com/vi/YcDX0ndqzqw/maxresdefault.jpg" alt="《FX战士久留美》主预告的官方封面画面" loading="lazy"></a><div class="video-caption"><strong>主预告</strong></div></article>
+          <article class="video-card"><a class="video-frame" href="https://www.youtube.com/watch?v=rZwpVLm00bs" target="_blank" rel="noopener noreferrer" aria-label="观看《FX战士久留美》官方视觉预告"><img src="https://img.youtube.com/vi/rZwpVLm00bs/maxresdefault.jpg" alt="《FX战士久留美》视觉预告的官方封面画面" loading="lazy"></a><div class="video-caption"><strong>视觉预告</strong></div></article>
         </div>
-        <p class="video-note">预览图由 YouTube 提供。点击前往官方频道观看；本项目与版权方无关联。</p>
+        <p class="video-note">视频来自作品的 YouTube 官方频道。</p>
       </section>
-      <footer>FX kantan! 是受《FX战士久留美》启发的非官方娱乐项目。所有资金、订单及收益均为模拟。主视觉图片由用户提供。<a href="https://fxkurumi-info.com/" target="_blank" rel="noopener noreferrer">查看作品官网 ↗</a></footer>
+      <footer>本站是非官方模拟交易项目。主视觉由用户提供。</footer>
     </main>
   </div>
   <script src="./assets/signalr.min.js" defer></script>
