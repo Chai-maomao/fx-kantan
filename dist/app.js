@@ -7,9 +7,11 @@
   const RANGES = {'1h':60,'2h':120,'8h':480,'1d':1440,'1w':10080,'1mo':43200,'3mo':129600};
   const START = 100000, KEY = 'fx-kantan-paper-v1';
   const GITHUB_MIRROR = location.hostname.toLowerCase() === 'chai-maomao.github.io';
-  const SERVER_ACCOUNTS = true;
+  const SERVER_ACCOUNTS = !GITHUB_MIRROR;
   const API_ORIGIN = GITHUB_MIRROR ? 'https://fx-kantan-gateway.cardex-online.workers.dev' : '';
   const LEADERBOARD_API = `${API_ORIGIN}/api/leaderboard`;
+  const MIRROR_BOARD_ORIGINS = ['https://fx-kantan.top', API_ORIGIN];
+  let leaderboardOrigin = MIRROR_BOARD_ORIGINS[0];
   const MIRROR_ID_KEY = 'fx-kantan-board-id-v1';
   const CURRENCY_NAMES = {USD:'美元',EUR:'欧元',GBP:'英镑',JPY:'日元',AUD:'澳元',NZD:'新西兰元',CHF:'瑞士法郎',CAD:'加元'};
   const $ = id => document.getElementById(id);
@@ -115,7 +117,8 @@
         recoveryStatus(restored.notices.length?restored.notices.join('；'):'持仓已保存到服务器，离线行情已核对');
       } else {
         const result=await FXRecovery.recover(account,{latest:quotes});
-        recoveryStatus(result.notices.length?result.notices.join('；'):'镜像站：本地存档，离线行情已核对');
+        const notices = result.notices.length ? `，${result.notices.join('；')}` : '，离线行情已核对';
+        recoveryStatus(`镜像站持仓保存在此浏览器${notices}。清除浏览器数据会删除本机存档。`);
       }
       localStorage.setItem(KEY,JSON.stringify(account));if(SERVER_ACCOUNTS){localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','false');}$('leverage').value=String(account.leverage);accountReady=true;
     }catch(error){recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);}
@@ -135,11 +138,46 @@
     headers.set('X-FXK-Visitor-ID',mirrorVisitorId);
     return headers;
   }
-  function leaderboardFetch(path='',options={}) {
-    return fetch(`${LEADERBOARD_API}${path}`,{...options,headers:mirrorHeaders(options.headers),credentials:GITHUB_MIRROR?'omit':'same-origin'});
+  async function leaderboardFetch(path='',options={}) {
+    if (!GITHUB_MIRROR) {
+      return fetch(`${LEADERBOARD_API}${path}`, {...options, headers:mirrorHeaders(options.headers), credentials:'same-origin'});
+    }
+    const method = options.method || 'GET';
+    // Reads may try another endpoint. Writes use the endpoint selected by the
+    // last successful read, so an uncertain POST is never replayed elsewhere.
+    const origins = method === 'GET'
+      ? [leaderboardOrigin, ...MIRROR_BOARD_ORIGINS.filter(origin => origin !== leaderboardOrigin)]
+      : [leaderboardOrigin];
+    let lastError;
+    for (const origin of origins) {
+      try {
+        const signals = [AbortSignal.timeout(4000)];
+        if (options.signal) signals.push(options.signal);
+        const response = await fetch(`${origin}/api/leaderboard${path}`, {
+          ...options, headers:mirrorHeaders(options.headers), credentials:'omit', signal:AbortSignal.any(signals)
+        });
+        if (!(response.headers.get('content-type') || '').includes('application/json')) {
+          throw Error('排行榜接口未返回有效数据。');
+        }
+        if (method === 'GET' && (response.status >= 500 || [403,429].includes(response.status))) {
+          throw Error('排行榜接口暂不可用。');
+        }
+        if (response.ok) leaderboardOrigin = origin;
+        return response;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
   }
   function save() {
-    try {localStorage.setItem(KEY,JSON.stringify(account));}catch{}
+    try {localStorage.setItem(KEY,JSON.stringify(account));}
+    catch {
+      accountReady=false;
+      recoveryStatus('本机存档失败，请保留此页面并检查浏览器存储权限。');
+      return;
+    }
+    if (!SERVER_ACCOUNTS) recoveryStatus('镜像站持仓已保存在此浏览器。清除浏览器数据会删除本机存档。');
     if(SERVER_ACCOUNTS&&accountReady){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}
   }
   function currentQuote(symbol) {
@@ -403,7 +441,7 @@
     } catch(error) {
       $('leaderboard-publish').disabled=true;
       $('leaderboard-remove').disabled=true;
-      setLeaderboardStatus(GITHUB_MIRROR?'抱歉，Cloudflare 转发暂时无法连接排行榜，请稍后刷新；交易存档连接状态见持仓区。':error.message||'排行榜暂不可用，请稍后刷新。','error');
+      setLeaderboardStatus(GITHUB_MIRROR?'抱歉，暂时无法连接公共排行榜。你仍可在镜像站交易，持仓保存在此浏览器。':error.message||'排行榜暂不可用，请稍后刷新。','error');
     }
   }
   async function publishLeaderboard(event) {
@@ -687,7 +725,7 @@
   $('leaderboard-refresh').addEventListener('click',refreshLeaderboard);
   $('reset-button').addEventListener('click',()=>{if(!accountReady||recovering)return;if(!confirm('确定重置模拟账户？所有持仓和交易记录都会清空。'))return;account.balance=START;account.startingBalance=START;account.positions=[];account.history=[];save();render();showMessage('模拟账户已重置。','success');});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){recoverAccount();refreshQuotes();refreshChart();}});
-  if(GITHUB_MIRROR)document.querySelector('.leaderboard-note').append(' 镜像经 Cloudflare 连接原站存档和榜单；首次使用会保存本机旧账户。不同域名的匿名账户不会自动合并。');
+  if (GITHUB_MIRROR) $('account-retry').textContent='回查离线行情';
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
   $('account-retry').addEventListener('click',async()=>{
     if(syncDirty&&SERVER_ACCOUNTS){accountReady=true;await syncAccount();}
