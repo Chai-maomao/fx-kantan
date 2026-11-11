@@ -25,7 +25,7 @@ await assert.rejects(feed.bars('EURUSD','1m',0,10000),/时间预算/);assert.equ
 // A failed post-liquidation upload must keep the balance/history in local backup.
 const sync=app.slice(app.indexOf('  async function syncAccount'),app.indexOf('  async function recoverAccount'));
 const writes=new Map(),account={balance:99000,positions:[],history:[{action:'强制平仓',pnl:-1000}]};let status='';
-const context={GITHUB_MIRROR:false,SERVER_ACCOUNTS:true,accountReady:true,recovering:false,syncBusy:false,syncDirty:true,serverRevision:1,account,accountRequest:async()=>{throw Error('账户接口服务暂时不可用（HTTP 504）。');},recoveryStatus:text=>status=text,localStorage:{setItem:(k,v)=>writes.set(k,v)},render(){},setTimeout(){}};
+const context={GITHUB_MIRROR:false,SERVER_ACCOUNTS:true,riskReady:true,syncConflict:false,pendingUpload:null,accountReady:true,recovering:false,syncBusy:false,syncTimer:0,syncDirty:true,serverRevision:1,account,sameAccountSnapshot:(a,b)=>JSON.stringify(a)===JSON.stringify(b),clearTimeout(){},accountRequest:async()=>{throw Error('账户接口服务暂时不可用（HTTP 504）。');},recoveryStatus:text=>status=text,localStorage:{setItem:(k,v)=>writes.set(k,v)},render(){},setTimeout(){}};
 vm.runInNewContext("localStorage.setItem('fx-kantan-paper-v1',JSON.stringify(account));",context);
 await vm.runInNewContext(sync+';syncAccount()',context);
 assert.equal(JSON.parse(writes.get('fx-kantan-paper-v1')).balance,99000);assert.equal(account.history.length,1);assert(context.syncDirty);assert(status.includes('本地备份保留'));

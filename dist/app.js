@@ -43,6 +43,7 @@
   let leaderboardMine = null, leaderboardBusy = false, editingPositionId = null;
   let mirrorVisitorId = null, marginPositionId = null;
   let accountReady=false,recovering=false,serverRevision=0,syncBusy=false,syncTimer=0,syncDirty=false,checkpointAt=0;
+  let riskReady=false,syncConflict=false,pendingUpload=null;
   function recoveryStatus(text) { $('account-storage-status').textContent=text; }
   function sameAccountSnapshot(a,b) {
     const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
@@ -58,7 +59,7 @@
           const hint=response.status===403?'请求被访问保护拦截':response.status===429?'请求过于频繁':response.status>=500?'服务暂时不可用或回查超时':'返回了网页而非账户数据';
           const error=Error(`账户接口${hint}（HTTP ${response.status}）。`);error.retryable=response.status>=500||response.status===200;throw error;
         }
-        if(!response.ok){const error=Error(data.error||`服务器存档暂不可用（HTTP ${response.status}）。`);error.retryable=response.status>=500;throw error;}
+        if(!response.ok){const error=Error(data.error||`服务器存档暂不可用（HTTP ${response.status}）。`);error.retryable=response.status>=500;error.conflict=response.status===409;throw error;}
         if(!data||typeof data!=='object'||!Number.isInteger(data.revision))throw Error('账户接口返回的数据不完整，请重试。');
         return data;
       }catch(error){
@@ -70,59 +71,98 @@
     throw lastError;
   }
   async function syncAccount() {
-    if(!SERVER_ACCOUNTS||!accountReady||recovering||syncBusy||!syncDirty)return;
-    syncBusy=true;syncDirty=false;recoveryStatus('正在保存到服务器…');
+    syncTimer=0;
+    if(!SERVER_ACCOUNTS||!(riskReady||accountReady)||syncConflict||recovering||syncBusy||!syncDirty)return;
+    syncBusy=true;syncDirty=false;let failed=false;
+    recoveryStatus('正在保存到服务器…');
     try {
-      const data=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
-      serverRevision=data.revision;localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending',String(syncDirty));recoveryStatus('持仓已保存到服务器');
+      // An unacknowledged upload must be replayed verbatim: it may already
+      // have committed. New risk exits stay in the newer local snapshot.
+      if(!pendingUpload) {
+        pendingUpload=JSON.stringify({account,revision:serverRevision});
+        localStorage.setItem('fxk-server-inflight',pendingUpload);
+      }
+      const sent=JSON.parse(pendingUpload);
+      const data=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:pendingUpload});
+      serverRevision=data.revision;
+      syncDirty=syncDirty||!sameAccountSnapshot(account,sent.account);
+      localStorage.setItem('fxk-server-revision',String(serverRevision));
+      localStorage.setItem('fxk-server-pending',String(syncDirty));
+      localStorage.removeItem('fxk-server-inflight');pendingUpload=null;
+      accountReady=true;
+      recoveryStatus(syncDirty?'最新风险结算已保存在本机，正在继续上传…':'持仓已保存到服务器');
     } catch(error) {
-      syncDirty=true;accountReady=false;recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);
+      failed=true;syncDirty=true;accountReady=false;
+      if(error.conflict){syncConflict=true;riskReady=false;}
+      recoveryStatus(error.conflict?`${error.message} 本地备份保留，请勿重置账户。`:`${error.message} 风险平仓仍继续，本地备份保留，将自动重试。`);
     } finally {
-      syncBusy=false;render();if(syncDirty&&accountReady)syncTimer=setTimeout(syncAccount,500);
+      syncBusy=false;render();
+      if(syncDirty&&!syncConflict){clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,failed?10000:500);}
     }
   }
   async function recoverAccount(initial=false) {
-    if(recovering)return;
-    if(syncBusy)return;
-    if(SERVER_ACCOUNTS&&accountReady&&syncDirty){await syncAccount();if(!accountReady)return;}
+    if(recovering||syncBusy||syncConflict)return;
+    // During a running session the browser owns the latest snapshot, including
+    // exits not yet acknowledged by the server. Never replace it during replay.
+    if((riskReady||accountReady)&&!initial) {
+      recovering=true;render();
+      try {
+        const result=await FXRecovery.recover(account,{latest:quotes});
+        if(result.notices.length)recoveryStatus(result.notices.join('；'));
+        save();
+      } catch(error){recoveryStatus(`历史回查失败：${error.message}；仍按最新有效报价检查止盈止损。`);}
+      finally{recovering=false;processTriggers(true);render();}
+      return;
+    }
     recovering=true;accountReady=false;recoveryStatus('正在恢复持仓并回查离线行情…');render();
+    let localRevision=0;
     try {
       if(SERVER_ACCOUNTS) {
+        localRevision=Number(localStorage.getItem('fxk-server-revision'))||0;
+        serverRevision=localRevision;
+        const journal=localStorage.getItem('fxk-server-inflight');
+        if(journal) {
+          const sent=JSON.parse(journal);
+          if(!Number.isInteger(sent.revision)||!sent.account)throw Error('本地上传记录不完整，请保留此页面。');
+          pendingUpload=journal;
+          const ack=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:journal});
+          serverRevision=localRevision=ack.revision;
+          localStorage.setItem('fxk-server-revision',String(serverRevision));
+          localStorage.setItem('fxk-server-pending','true');
+          localStorage.removeItem('fxk-server-inflight');pendingUpload=null;
+        }
         const saved=await accountRequest();
         serverRevision=saved.revision;
-        if(saved.account && !initial) {
-          // A save failure leaves a newer local copy. Only overwrite it when
-          // no local edits remain; conflicts require an explicit page reload.
-          if(syncDirty)throw Error('本地有未保存交易，请刷新前保留此页面并重试保存。');
-        }
         if(saved.account) {
-          if(initial&&localStorage.getItem('fxk-server-pending')==='true') {
-            const localRevision=Number(localStorage.getItem('fxk-server-revision'));
-            if(localRevision!==serverRevision) {
-              if(!sameAccountSnapshot(account,saved.account))throw Error('服务器与本地未保存交易冲突；请保留当前页面，勿重置账户。');
-              // The server committed this exact local snapshot; only its reply was lost.
-              Object.assign(account,saved.account);
-            }else {
-              const resumed=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:serverRevision})});
-              serverRevision=resumed.revision;
+          if(localStorage.getItem('fxk-server-pending')==='true') {
+            if(localRevision!==serverRevision&&!sameAccountSnapshot(account,saved.account)) {
+              const error=Error('服务器与本地未保存交易冲突；请保留当前页面，勿重置账户。');error.conflict=true;throw error;
             }
-          }else Object.assign(account,saved.account);
+          } else Object.assign(account,saved.account);
         }
-        else {
-          const imported=await accountRequest('',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({account,revision:0})});
-          serverRevision=imported.revision;
-        }
-        const restored=await accountRequest('/recover',{method:'POST'});
-        Object.assign(account,restored.account);serverRevision=restored.revision;syncDirty=false;
-        recoveryStatus(restored.notices.length?restored.notices.join('；'):'持仓已保存到服务器，离线行情已核对');
+        // Replay uses the same shared engine as the server, but never waits
+        // for the account endpoint to become available again during trading.
+        riskReady=true;
+        const restored=await FXRecovery.recover(account,{latest:quotes});
+        recoveryStatus(restored.notices.length?restored.notices.join('；'):'离线行情已核对');
       } else {
         const result=await FXRecovery.recover(account,{latest:quotes});
         const notices = result.notices.length ? `，${result.notices.join('；')}` : '，离线行情已核对';
         recoveryStatus(`镜像站持仓保存在此浏览器${notices}。清除浏览器数据会删除本机存档。`);
       }
-      localStorage.setItem(KEY,JSON.stringify(account));if(SERVER_ACCOUNTS){localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','false');}$('leverage').value=String(account.leverage);accountReady=true;
-    }catch(error){recoveryStatus(`${error.message} 本地备份保留，请点击重试。`);}
-    finally{recovering=false;render();}
+      riskReady=true;accountReady=true;$('leverage').value=String(account.leverage);
+      save();
+    }catch(error){
+      if(error.conflict){syncConflict=true;riskReady=false;}
+      else if(SERVER_ACCOUNTS&&localRevision>0&&localStorage.getItem(KEY)) {
+        // A previously confirmed local account may still reduce exposure when
+        // the account service is down; new orders remain blocked until upload.
+        riskReady=true;serverRevision=localRevision;syncDirty=true;
+        save();
+      }
+      recoveryStatus(`${error.message} 本地备份保留，${riskReady?'风险平仓仍继续，将自动重试。':'请点击重试。'}`);
+    }
+    finally{recovering=false;processTriggers(true);render();}
   }
 
   function mirrorHeaders(existing) {
@@ -173,12 +213,12 @@
   function save() {
     try {localStorage.setItem(KEY,JSON.stringify(account));}
     catch {
-      accountReady=false;
+      accountReady=false;riskReady=false;
       recoveryStatus('本机存档失败，请保留此页面并检查浏览器存储权限。');
       return;
     }
     if (!SERVER_ACCOUNTS) recoveryStatus('镜像站持仓已保存在此浏览器。清除浏览器数据会删除本机存档。');
-    if(SERVER_ACCOUNTS&&accountReady){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}
+    if(SERVER_ACCOUNTS&&(riskReady||accountReady)&&!syncConflict){syncDirty=true;try{localStorage.setItem('fxk-server-revision',String(serverRevision));localStorage.setItem('fxk-server-pending','true');}catch{}if(!syncBusy){if(!pendingUpload){clearTimeout(syncTimer);syncTimer=setTimeout(syncAccount,200);}else if(!syncTimer)syncTimer=setTimeout(syncAccount,10000);}}
   }
   function currentQuote(symbol) {
     const q = quotes[symbol];
@@ -365,7 +405,7 @@
   function closePosition(id,reason='平仓') {
     const index = account.positions.findIndex(p => p.id === id);
     if (index < 0) return;
-    if(!accountReady||recovering)return showMessage('正在回查离线行情，请稍候。','error');
+    if(!(riskReady||accountReady)||recovering||syncConflict)return showMessage('正在回查离线行情，请稍候。','error');
     const p = account.positions[index], q = currentQuote(p.symbol);
     if (!canTrade(p.symbol)) return showMessage('报价或换算汇率已过期，暂时无法平仓。','error');
     let pnl = markToMarket(p);
@@ -378,9 +418,9 @@
     account.history = account.history.slice(0,100);
     save();render();showMessage(`${reason==='平仓'?'已平仓':reason+'已触发'}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}。`,pnl >= 0 ? 'success' : 'error');
   }
-  function processTriggers() {
-    if(!accountReady||recovering)return;
-    if(account.positions.some(p=>Date.now()-(Number(p.checkedAt)||Date.parse(p.time))>20000)){recoverAccount();return;}
+  function processTriggers(skipRecovery=false) {
+    if(!(riskReady||accountReady)||recovering||syncConflict)return;
+    if(!skipRecovery&&!syncBusy&&account.positions.some(p=>Date.now()-(Number(p.checkedAt)||Date.parse(p.time))>20000)){recoverAccount();return;}
     for(const p of [...account.positions]) {
       if(!canTrade(p.symbol)) continue;
       const q=currentQuote(p.symbol),exit=p.side==='long'?q.bid:q.ask;
@@ -728,7 +768,7 @@
   if (GITHUB_MIRROR) $('account-retry').textContent='回查离线行情';
   resetRiskReference($('take-profit'),selected);resetRiskReference($('stop-loss'),selected);
   $('account-retry').addEventListener('click',async()=>{
-    if(syncDirty&&SERVER_ACCOUNTS){accountReady=true;await syncAccount();}
+    if(syncDirty&&SERVER_ACCOUNTS&&!syncConflict){await syncAccount();}
     else await recoverAccount(true);
   });
   render();adjustChartSelection('range');
